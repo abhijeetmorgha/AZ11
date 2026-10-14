@@ -100,7 +100,7 @@ main{max-width:1200px;margin:auto;padding:20px}.card{background:#fff;border:1px 
       <label>Answer Key<textarea id="pKey" rows="5" placeholder="Example: ABCDABCD... or A,B,C,D,..."></textarea></label>
       <div class="small muted">The answer key must contain exactly the same number of A/B/C/D answers as the Questions field.</div>
       <label>PDF Paper<input id="pFile" type="file" accept="application/pdf,.pdf" onchange="preparePdfTestFile(this.files[0])"></label>
-      <div id="pFileInfo" class="small muted"></div>
+      <div id="pFileInfo" class="small muted">Large PDFs are uploaded safely in small chunks. Maximum 30 MB.</div>
       <div class="row"><button class="btn green" onclick="savePdfTest()">Publish PDF Test</button><button class="btn secondary" onclick="clearPdfTestForm()">Clear</button></div>
     </div>
   </div>
@@ -157,7 +157,20 @@ function renderNotes(){$('nCount').textContent=nItems.length;$('nList').innerHTM
 
 
 function cleanAnswerKey(v){return String(v||'').toUpperCase().replace(/[^ABCD]/g,'')}
-function preparePdfTestFile(f){pPreparedFile=null;if(!f){$('pFileInfo').textContent='';return}if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name)))return $('pFileInfo').textContent='Choose a PDF file.';if(f.size>5*1024*1024)return $('pFileInfo').textContent='PDF must be 5 MB or smaller.';pPreparedFile=f;$('pFileInfo').textContent=`Ready: ${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`}
+function preparePdfTestFile(f){pPreparedFile=null;if(!f){$('pFileInfo').textContent='';return}if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name)))return $('pFileInfo').textContent='Choose a PDF file.';if(f.size>30*1024*1024)return $('pFileInfo').textContent='PDF must be 30 MB or smaller.';pPreparedFile=f;$('pFileInfo').textContent=`Ready: ${f.name} • ${(f.size/1024/1024).toFixed(2)} MB • will upload in safe chunks`}
+async function uploadPdfInChunks(file,id){
+  const chunkSize=2*1024*1024;
+  const total=Math.ceil(file.size/chunkSize);
+  for(let i=0;i<total;i++){
+    const chunk=file.slice(i*chunkSize,Math.min(file.size,(i+1)*chunkSize),'application/octet-stream');
+    $('pFileInfo').textContent=`Uploading ${file.name}: part ${i+1}/${total} (${Math.round(((i+1)/total)*100)}%)`;
+    const url=`/api/pdf-test-file?id=${encodeURIComponent(id)}&part=${i}&total=${total}&size=${file.size}`;
+    const r=await fetch(url,{method:'POST',headers:{'x-az11-admin-key':adminKey(),'content-type':'application/octet-stream','x-az11-file-name':encodeURIComponent(file.name)},body:chunk});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||(`PDF part ${i+1} upload HTTP ${r.status}`));
+  }
+  $('pFileInfo').textContent=`Upload complete: ${file.name} • ${(file.size/1024/1024).toFixed(2)} MB`;
+}
 async function loadPdfTests(){try{const r=await fetch('/api/pdf-tests?ts='+Date.now(),{cache:'no-store'});const d=await r.json();pItems=Array.isArray(d)?d:(d.tests||[]);renderPdfTests()}catch(e){msg('PDF Tests API not available.')}}
 async function savePdfTest(){
   if(!adminKey())return msg('Connect Owner Admin first.');
@@ -169,8 +182,7 @@ async function savePdfTest(){
   const id=pEditing?.id||String(Date.now());
   try{
     if(pPreparedFile){
-      const fr=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id),{method:'POST',headers:{'x-az11-admin-key':adminKey(),'content-type':'application/pdf','x-az11-file-name':encodeURIComponent(pPreparedFile.name)},body:pPreparedFile});
-      const fd=await fr.json().catch(()=>({}));if(!fr.ok)throw new Error(fd.error||('PDF upload HTTP '+fr.status));
+      await uploadPdfInChunks(pPreparedFile,id);
     }
     await api('/api/pdf-tests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,title,subject,count,minutes,answerKey:key,hasFile:true,fileName:pPreparedFile?.name||pEditing?.fileName||'paper.pdf'})});
     clearPdfTestForm();await loadPdfTests();msg('PDF test published. Everyone will receive it on sync.');

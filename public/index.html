@@ -1978,10 +1978,48 @@ function qVisual(q){
   return ''
 }
 function optionChoices(q){if(q.imageOptionsOnly){return [0,1,2,3].map(i=>`<label class="option image-choice"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div>${String.fromCharCode(65+i)}</div></label>`).join('')}return q.o.map((op,i)=>`<label class="option"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div><b>${String.fromCharCode(65+i)}.</b> ${op}</div></label>`).join('')}
+const AZ11_PDF_URL_CACHE=new Map();
+async function getPdfTestPaperUrl(id){
+  id=String(id||'');
+  if(AZ11_PDF_URL_CACHE.has(id))return AZ11_PDF_URL_CACHE.get(id);
+  const mr=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id)+'&meta=1&ts='+Date.now(),{cache:'no-store'});
+  if(!mr.ok)throw new Error('PDF metadata HTTP '+mr.status);
+  const meta=await mr.json();
+  if(!meta.chunked){
+    const url='/api/pdf-test-file?id='+encodeURIComponent(id);
+    AZ11_PDF_URL_CACHE.set(id,url);
+    return url;
+  }
+  const parts=[];
+  for(let i=0;i<Number(meta.chunks||0);i++){
+    const r=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id)+'&part='+i,{cache:'force-cache'});
+    if(!r.ok)throw new Error('PDF part '+(i+1)+' HTTP '+r.status);
+    parts.push(await r.arrayBuffer());
+  }
+  const url=URL.createObjectURL(new Blob(parts,{type:'application/pdf'}));
+  AZ11_PDF_URL_CACHE.set(id,url);
+  return url;
+}
+async function renderPdfTestPaper(){
+  const box=document.querySelector('[data-pdf-test-viewer]');
+  if(!box||!state.exam?.pdfTest)return;
+  const id=String(box.getAttribute('data-pdf-test-viewer')||state.exam.pdfTest.id||'');
+  const open=document.getElementById('az11PdfOpen');
+  box.innerHTML='<div class="small muted" style="padding:18px">Loading PDF paper…</div>';
+  try{
+    const url=await getPdfTestPaperUrl(id);
+    if(open){open.href=url;open.target='_blank';open.textContent='Open PDF'}
+    box.innerHTML=`<iframe src="${url}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;background:#fff"></iframe>`;
+  }catch(e){
+    console.error(e);
+    box.innerHTML='<div class="small muted" style="padding:18px">⚠️ PDF could not load. Check internet once and reopen the test.</div>';
+    if(open){open.removeAttribute('href');open.textContent='PDF unavailable'}
+  }
+}
 function examPage(){
   const q=state.exam.questions[state.current];
   const pdf=state.exam.pdfTest;
-  const pdfViewer=pdf?`<div class="card" style="padding:10px;margin-bottom:14px"><div class="row" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
+  const pdfViewer=pdf?`<div class="card" style="padding:10px;margin-bottom:14px"><div class="row" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a id="az11PdfOpen" class="btn secondary" href="#">Loading PDF…</a></div><div data-pdf-test-viewer="${esc(String(pdf.id))}" style="margin-top:10px"><div class="small muted" style="padding:18px">Loading PDF paper…</div></div></div>`:'';
   return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
 }
 function exitTest(){
@@ -1994,7 +2032,7 @@ function exitTest(){
   setTimeout(()=>toast('Test exited'),50);
 }
 function selectAns(i){state.answers[state.current]=i;saveSession();renderExamOnly()}
-function renderExamOnly(){document.getElementById('app').innerHTML=examPage();setTimeout(renderVisibleQuestionFiles,0)}
+function renderExamOnly(){document.getElementById('app').innerHTML=examPage();setTimeout(renderVisibleQuestionFiles,0);if(state.exam?.pdfTest)setTimeout(renderPdfTestPaper,0)}
 function prevQ(){if(state.current>0)state.current--;saveSession();renderExamOnly()}
 function nextQ(){if(state.current<state.exam.questions.length-1)state.current++;saveSession();renderExamOnly()}
 function clearAns(){state.answers[state.current]=null;saveSession();renderExamOnly()}
@@ -2638,6 +2676,7 @@ function render(){
   else if(state.page==='result')html=resultPage();
   document.getElementById('app').innerHTML=html;
   setTimeout(renderVisibleQuestionFiles,0);
+  if(state.page==='exam'&&state.exam?.pdfTest)setTimeout(renderPdfTestPaper,0);
   setTimeout(refreshInstallButton,0);
   if(state.page==='dashboard'||state.page==='performance')setTimeout(drawPerformanceGraph,0);
   if(state.page==='admin')setTimeout(toggleAdminOptions,0);

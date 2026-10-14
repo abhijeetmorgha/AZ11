@@ -18,7 +18,7 @@ export default async req=>{
   if(req.method==="DELETE"){
     if(!admin(req))return J({error:"Wrong or missing owner key."},401);
     let b;try{b=await req.json()}catch{return J({error:"Invalid JSON."},400)}
-    const id=String(b.id||"");let items=await store.get("index",{type:"json",consistency:"strong"})||[];items=items.filter(x=>String(x.id)!==id);await store.setJSON("index",items);await store.delete(`file-${id}`);return J({ok:true,count:items.length});
+    const id=String(b.id||"");let items=await store.get("index",{type:"json",consistency:"strong"})||[];items=items.filter(x=>String(x.id)!==id);await store.setJSON("index",items);const meta=await store.get(`filemeta-${id}`,{type:"json",consistency:"strong"});if(meta?.chunks){for(let i=0;i<Number(meta.chunks);i++)await store.delete(`file-${id}-part-${i}`)}await store.delete(`filemeta-${id}`);await store.delete(`file-${id}`);return J({ok:true,count:items.length});
   }
   return J({error:"Method not allowed."},405)
 };
