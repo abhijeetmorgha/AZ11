@@ -1,0 +1,31 @@
+{
+  "id": "./",
+  "name": "AZ11",
+  "short_name": "AZ11",
+  "description": "AZ11 NEET PCB practice app",
+  "start_url": "./index.html?build=az11-final-v1",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#f7f9ff",
+  "theme_color": "#0f4cbb",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

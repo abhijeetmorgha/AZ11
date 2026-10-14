@@ -1,0 +1,54 @@
+AZ11 — FINAL OWNER/PUBLIC SETUP
+
+WHAT THIS BUILD DOES
+--------------------
+PUBLIC APP:
+- Name: AZ11
+- Your uploaded photo is the app/logo icon.
+- Public users have NO Admin button/route.
+- Install/Update App button only; app Download button removed.
+- Full NEET test: 180 questions exactly:
+  45 Physics + 45 Chemistry + 45 Botany + 45 Zoology
+  720 marks, +4/-1, 180 minutes.
+- Built-in diagram tests are removed.
+- Diagram Questions page shows ONLY owner-published diagram questions.
+- Owner-added Questions and Notes sync automatically when users are online.
+- Latest synced data remains cached locally for offline use.
+- Users can register/login.
+- Test progress is saved locally and also synced to the user account when online.
+
+OWNER ADMIN:
+- Private page: /owner-az11.html
+- Add/edit/delete text questions.
+- Add Diagram question image.
+- Add Question File (image/PDF with question + options inside).
+  Students then see only A / B / C / D buttons.
+- Bulk import text questions by JSON/CSV/TXT.
+- Add/edit/delete Notes with image/PDF/file.
+- View registered usernames and their synced test attempts.
+- Passwords are NEVER shown to the owner. Passwords are stored as secure scrypt hashes.
+
+ONE-TIME NETLIFY SETUP
+----------------------
+This project uses Netlify Functions + Netlify Blobs, so deploy the WHOLE PROJECT
+through a Netlify build (Git import / Netlify CLI), not only static drag-and-drop.
+
+Set this Environment Variable in Netlify:
+  AZ11_ADMIN_KEY = choose a strong private password only you know
+
+Then redeploy.
+
+After deployment:
+Public app:
+  https://YOUR-SITE.netlify.app/
+
+Private Owner Admin:
+  https://YOUR-SITE.netlify.app/owner-az11.html
+
+IMPORTANT
+---------
+- Do NOT share your AZ11_ADMIN_KEY.
+- Even if someone discovers the owner page URL, write/delete actions require the key.
+- Public users can use the app without an account, but server-side progress requires login.
+- Offline progress remains local and syncs when the user logs in / comes back online.
+- File attachments are limited to 3 MB each.
