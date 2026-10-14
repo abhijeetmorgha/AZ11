@@ -17,8 +17,15 @@ export default async req=>{
     const id=String(x.id),old=items.find(q=>String(q.id)===id);
     let hasFile=!!old?.hasFile,fileName=old?.fileName||"",fileType=old?.fileType||"";
     if(x.fileBase64){
-      const buf=Buffer.from(x.fileBase64,"base64");if(buf.length>3*1024*1024)return J({error:"Question file must be 3 MB or smaller."},413);
-      await store.set(`file-${id}`,buf);hasFile=true;fileName=String(x.fileName||"question-file");fileType=String(x.fileType||"application/octet-stream");
+      const buf=Buffer.from(x.fileBase64,"base64");
+      if(buf.length>3*1024*1024)return J({error:"Question file must be 3 MB or smaller."},413);
+      const arrayBuffer=buf.buffer.slice(buf.byteOffset,buf.byteOffset+buf.byteLength);
+      await store.set(`file-${id}`,arrayBuffer);
+      const verify=await store.getMetadata(`file-${id}`,{consistency:"strong"});
+      if(!verify)return J({error:"Question file upload could not be verified. Please try again."},500);
+      hasFile=true;
+      fileName=String(x.fileName||"question-file");
+      fileType=String(x.fileType||"application/octet-stream");
     }else if(x.keepExistingFile&&old?.hasFile){hasFile=true}else if(!x.imageOptionsOnly){hasFile=false;if(old?.hasFile)await store.delete(`file-${id}`)}
     const {fileBase64,keepExistingFile,...rest}=x;
     const saved={...rest,id,baseId:String(rest.baseId||id),hasFile,fileName,fileType,updated:new Date().toISOString()};

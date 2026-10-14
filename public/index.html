@@ -1266,26 +1266,57 @@ async function fetchQuestionFile(q){
   let cached=await getCachedQuestionFile(q.id);
   if(cached)return cached;
   if(!navigator.onLine)return null;
+
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),15000);
   try{
-    const r=await fetch(`/api/question-file?id=${encodeURIComponent(q.id)}&ts=${Date.now()}`,{cache:'no-store'});
-    if(!r.ok)return null;
+    const r=await fetch(`/api/question-file?id=${encodeURIComponent(q.id)}&ts=${Date.now()}`,{
+      cache:'no-store',
+      signal:controller.signal
+    });
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const blob=await r.blob();
+    if(!blob || !blob.size)throw new Error('Empty question file');
     cached={id:String(q.id),blob,name:q.fileName||'question-file',type:q.fileType||blob.type};
     await cacheQuestionFile(q.id,blob,cached.name,cached.type);
     return cached;
-  }catch(e){return null}
+  }catch(e){
+    console.error('AZ11 question file load failed',q.id,e);
+    return null;
+  }finally{
+    clearTimeout(timer);
+  }
 }
 async function renderVisibleQuestionFiles(){
   const els=[...document.querySelectorAll('[data-qfile]')];
   for(const el of els){
     const id=el.getAttribute('data-qfile');
-    const q=allQuestions().find(x=>String(x.id)===String(id)) || AZ11_FULL_BANK.find(x=>String(x.id)===String(id));
-    if(!q||!q.hasFile)continue;
+
+    // The current exam question is the most reliable source.
+    const q=
+      (state.exam?.questions||[]).find(x=>String(x.id)===String(id)) ||
+      getRemoteQuestions().find(x=>String(x.id)===String(id)) ||
+      allQuestions().find(x=>String(x.id)===String(id)) ||
+      AZ11_FULL_BANK.find(x=>String(x.id)===String(id));
+
+    if(!q){
+      el.innerHTML='<div class="small muted">Question data could not be found. Refresh the app once.</div>';
+      continue;
+    }
+    if(!q.hasFile){
+      el.innerHTML='<div class="small muted">This question has no attached image/PDF.</div>';
+      continue;
+    }
+
     const f=await fetchQuestionFile(q);
-    if(!f){el.innerHTML='<div class="small muted">Question file is not cached. Connect to internet once to load it.</div>';continue}
+    if(!f){
+      el.innerHTML='<div class="small muted">⚠️ Question image/PDF could not load. Re-upload this file once from Owner Admin, then refresh.</div>';
+      continue;
+    }
+
     const url=URL.createObjectURL(f.blob);
     if((f.type||'').startsWith('image/')){
-      el.innerHTML=`<img src="${url}" alt="Question image" style="max-width:100%;border-radius:14px">`;
+      el.innerHTML=`<img src="${url}" alt="Question image" style="max-width:100%;max-height:620px;object-fit:contain;border-radius:14px">`;
     }else if((f.type||'')==='application/pdf'){
       el.innerHTML=`<div class="file-question"><iframe src="${url}" title="Question PDF"></iframe></div>`;
     }else{
