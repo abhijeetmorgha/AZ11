@@ -25,6 +25,7 @@ main{max-width:1200px;margin:auto;padding:20px}.card{background:#fff;border:1px 
 <div class="tabs">
   <button class="btn tab active" data-tab="questions" onclick="tab('questions',this)">Questions</button>
   <button class="btn tab secondary" data-tab="notes" onclick="tab('notes',this)">Notes</button>
+  <button class="btn tab secondary" data-tab="pdftests" onclick="tab('pdftests',this)">PDF Tests</button>
   <button class="btn tab secondary" data-tab="users" onclick="tab('users',this)">Users & Progress</button>
 </div>
 
@@ -85,6 +86,31 @@ main{max-width:1200px;margin:auto;padding:20px}.card{background:#fff;border:1px 
 </div>
 </section>
 
+
+<section id="pdftests" class="panel">
+<div class="grid">
+  <div class="card">
+    <h2>Upload PDF Test</h2>
+    <p class="muted">Upload a PDF paper you created or have permission to share. Add the answer key so AZ11 can score the test automatically.</p>
+    <div class="form">
+      <label>Test Name<input id="pTitle" placeholder="e.g. NEET Mock Test 01"></label>
+      <label>Test Type<select id="pSubject"><option>NEET Full Paper</option><option>Physics</option><option>Chemistry</option><option>Biology</option><option>Custom</option></select></label>
+      <label>Questions<input id="pCount" type="number" min="1" max="180" value="20"></label>
+      <label>Duration (minutes)<input id="pMinutes" type="number" min="1" max="300" value="20"></label>
+      <label>Answer Key<textarea id="pKey" rows="5" placeholder="Example: ABCDABCD... or A,B,C,D,..."></textarea></label>
+      <div class="small muted">The answer key must contain exactly the same number of A/B/C/D answers as the Questions field.</div>
+      <label>PDF Paper<input id="pFile" type="file" accept="application/pdf,.pdf" onchange="preparePdfTestFile(this.files[0])"></label>
+      <div id="pFileInfo" class="small muted"></div>
+      <div class="row"><button class="btn green" onclick="savePdfTest()">Publish PDF Test</button><button class="btn secondary" onclick="clearPdfTestForm()">Clear</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Published PDF Tests</h2>
+    <b id="pCountLabel">0</b><div id="pList"></div>
+  </div>
+</div>
+</section>
+
 <section id="users" class="panel">
 <div class="card">
   <div class="row" style="justify-content:space-between;align-items:center"><div><h2 style="margin:0">Registered Users</h2><div class="small muted">You can view usernames and progress. Passwords are never shown.</div></div><button class="btn secondary" onclick="loadUsers()">Refresh</button></div>
@@ -94,13 +120,13 @@ main{max-width:1200px;margin:auto;padding:20px}.card{background:#fff;border:1px 
 </main>
 
 <script>
-let qItems=[],nItems=[],qEditing=null,nEditing=null,qPreparedFile=null,nPreparedFile=null;
+let qItems=[],nItems=[],pItems=[],qEditing=null,nEditing=null,pEditing=null,qPreparedFile=null,nPreparedFile=null,pPreparedFile=null;
 const $=id=>document.getElementById(id);
 function adminKey(){return sessionStorage.getItem('az11AdminKey')||''}
 function msg(t){$('status').textContent=t}
 function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
-function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===b);x.classList.toggle('secondary',x!==b)});if(id==='users')loadUsers()}
-async function connectAdmin(){const k=$('adminKeyInput').value.trim();if(!k)return msg('Enter AZ11_ADMIN_KEY.');sessionStorage.setItem('az11AdminKey',k);await Promise.all([loadQuestions(),loadNotes(),loadUsers()]);msg('Owner Admin connected.')}
+function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===b);x.classList.toggle('secondary',x!==b)});if(id==='users')loadUsers();if(id==='pdftests')loadPdfTests()}
+async function connectAdmin(){const k=$('adminKeyInput').value.trim();if(!k)return msg('Enter AZ11_ADMIN_KEY.');sessionStorage.setItem('az11AdminKey',k);await Promise.all([loadQuestions(),loadNotes(),loadPdfTests(),loadUsers()]);msg('Owner Admin connected.')}
 function syncSubject(){}
 function toggleQuestionMode(){const fileMode=['Diagram','File Question'].includes($('qType').value);$('qOptions').classList.toggle('hide',fileMode);$('qFileWrap').classList.toggle('hide',!fileMode)}
 async function compressImage(file,max=1200,quality=.8){return new Promise((res,rej)=>{const rd=new FileReader();rd.onerror=()=>rej(rd.error);rd.onload=e=>{const im=new Image();im.onerror=()=>rej(new Error('Invalid image'));im.onload=()=>{const s=Math.min(1,max/im.width,max/im.height),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?res(new File([b],file.name.replace(/\.[^.]+$/,'.jpg'),{type:'image/jpeg'})):rej(new Error('compress')),'image/jpeg',quality)};im.src=e.target.result};rd.readAsDataURL(file)})}
@@ -129,8 +155,34 @@ function editNote(id){nEditing=nItems.find(x=>String(x.id)===String(id));if(!nEd
 function clearNoteForm(){nEditing=null;nPreparedFile=null;['nChapter','nTitle','nBody','nExplanation'].forEach(x=>$(x).value='');$('nFile').value='';$('nFileInfo').textContent=''}
 function renderNotes(){$('nCount').textContent=nItems.length;$('nList').innerHTML=nItems.length?nItems.slice().reverse().map(x=>`<div class="item"><b>${esc(x.subject)} • ${esc(x.chapter)}</b><h3>${esc(x.title)}</h3>${x.hasFile?`<div class="small muted">📎 ${esc(x.fileName||'file')}</div>`:''}<div class="row"><button class="btn secondary" onclick="editNote('${x.id}')">Edit</button><button class="btn red" onclick="deleteNote('${x.id}')">Delete</button></div></div>`).join(''):'<p class="muted">No notes yet.</p>'}
 
+
+function cleanAnswerKey(v){return String(v||'').toUpperCase().replace(/[^ABCD]/g,'')}
+function preparePdfTestFile(f){pPreparedFile=null;if(!f){$('pFileInfo').textContent='';return}if(!(f.type==='application/pdf'||/\.pdf$/i.test(f.name)))return $('pFileInfo').textContent='Choose a PDF file.';if(f.size>5*1024*1024)return $('pFileInfo').textContent='PDF must be 5 MB or smaller.';pPreparedFile=f;$('pFileInfo').textContent=`Ready: ${f.name} • ${(f.size/1024/1024).toFixed(2)} MB`}
+async function loadPdfTests(){try{const r=await fetch('/api/pdf-tests?ts='+Date.now(),{cache:'no-store'});const d=await r.json();pItems=Array.isArray(d)?d:(d.tests||[]);renderPdfTests()}catch(e){msg('PDF Tests API not available.')}}
+async function savePdfTest(){
+  if(!adminKey())return msg('Connect Owner Admin first.');
+  const title=$('pTitle').value.trim(),subject=$('pSubject').value,count=Math.max(1,Math.min(180,Number($('pCount').value)||0)),minutes=Math.max(1,Math.min(300,Number($('pMinutes').value)||0)),key=cleanAnswerKey($('pKey').value);
+  if(!title)return msg('Enter test name.');
+  if(!count)return msg('Enter question count.');
+  if(key.length!==count)return msg(`Answer key has ${key.length} answers, but Questions is ${count}.`);
+  if(!pPreparedFile&&!pEditing?.hasFile)return msg('Choose the PDF paper.');
+  const id=pEditing?.id||String(Date.now());
+  try{
+    if(pPreparedFile){
+      const fr=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id),{method:'POST',headers:{'x-az11-admin-key':adminKey(),'content-type':'application/pdf','x-az11-file-name':encodeURIComponent(pPreparedFile.name)},body:pPreparedFile});
+      const fd=await fr.json().catch(()=>({}));if(!fr.ok)throw new Error(fd.error||('PDF upload HTTP '+fr.status));
+    }
+    await api('/api/pdf-tests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,title,subject,count,minutes,answerKey:key,hasFile:true,fileName:pPreparedFile?.name||pEditing?.fileName||'paper.pdf'})});
+    clearPdfTestForm();await loadPdfTests();msg('PDF test published. Everyone will receive it on sync.');
+  }catch(e){msg('PDF test save failed: '+e.message)}
+}
+async function deletePdfTest(id){if(!confirm('Delete this PDF test?'))return;try{await api('/api/pdf-tests',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({id})});await loadPdfTests();msg('PDF test deleted.')}catch(e){msg(e.message)}}
+function editPdfTest(id){pEditing=pItems.find(x=>String(x.id)===String(id));if(!pEditing)return;$('pTitle').value=pEditing.title||'';$('pSubject').value=pEditing.subject||'NEET Full Paper';$('pCount').value=pEditing.count||20;$('pMinutes').value=pEditing.minutes||20;$('pKey').value=pEditing.answerKey||'';pPreparedFile=null;$('pFile').value='';$('pFileInfo').textContent=pEditing.hasFile?`Existing: ${pEditing.fileName||'paper.pdf'} (kept unless replaced)`:'';window.scrollTo({top:0,behavior:'smooth'})}
+function clearPdfTestForm(){pEditing=null;pPreparedFile=null;$('pTitle').value='';$('pSubject').value='NEET Full Paper';$('pCount').value='20';$('pMinutes').value='20';$('pKey').value='';$('pFile').value='';$('pFileInfo').textContent=''}
+function renderPdfTests(){$('pCountLabel').textContent=pItems.length;$('pList').innerHTML=pItems.length?pItems.slice().reverse().map(x=>`<div class="item"><b>${esc(x.title)}</b><p>${esc(x.subject)} • ${x.count} questions • ${x.minutes} min • +4/−1</p><div class="small muted">📄 ${esc(x.fileName||'paper.pdf')}</div><div class="row" style="margin-top:8px"><button class="btn secondary" onclick="editPdfTest('${x.id}')">Edit</button><button class="btn red" onclick="deletePdfTest('${x.id}')">Delete</button></div></div>`).join(''):'<p class="muted">No PDF tests yet.</p>'}
+
 async function loadUsers(){if(!adminKey())return;try{const d=await api('/api/owner-users',{cache:'no-store'});const users=d.users||[];$('uCount').textContent=`${users.length} registered users`;$('uList').innerHTML=users.length?users.map(u=>`<div class="item account"><div><b>${esc(u.displayName||u.username)}</b> <span class="small muted">@${esc(u.username)}</span><br><span class="small muted">Joined: ${esc(u.createdAt||'')} • Last seen: ${esc(u.lastSeen||'')}</span><p>Attempts: <b>${u.attemptCount||0}</b>${u.lastAttempt?` • Last: ${esc(u.lastAttempt.name)} — ${u.lastAttempt.score}/${u.lastAttempt.total*4}`:''}</p></div></div>`).join(''):'<p class="muted">No registered users yet.</p>'}catch(e){msg('User list failed: '+e.message)}}
 
-toggleQuestionMode();loadQuestions();loadNotes();
+toggleQuestionMode();loadQuestions();loadNotes();loadPdfTests();
 </script>
 </body></html>

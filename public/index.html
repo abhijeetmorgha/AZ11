@@ -681,6 +681,7 @@ custom:'az11_legacy_custom_v1',
 notes:'az11_legacy_notes_v1',
 syncedNotes:'az11_synced_notes_v1',
 remoteQuestions:'az11_remote_questions_v1',
+pdfTests:'az11_pdf_tests_v1',
 questionFiles:'az11_question_files_v1',
 pendingAttempts:'az11_pending_attempts_v1',
 session:'az11_exam_session_v1'
@@ -1241,6 +1242,24 @@ async function syncRemoteQuestions(showToast=false){
   }
 }
 
+function getPdfTests(){try{return JSON.parse(localStorage.getItem(STORE.pdfTests)||'[]')}catch(e){return []}}
+function savePdfTests(v){try{localStorage.setItem(STORE.pdfTests,JSON.stringify(v||[]))}catch(e){}}
+async function syncPdfTests(showToast=false){
+  if(!(location.protocol==='https:'||location.hostname==='localhost'))return false;
+  try{
+    const r=await fetch('/api/pdf-tests?ts='+Date.now(),{cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const data=await r.json();
+    const arr=Array.isArray(data)?data:(data.tests||[]);
+    savePdfTests(arr);
+    if(showToast)toast(`Synced ${arr.length} PDF tests`);
+    return true;
+  }catch(e){
+    if(showToast)toast('Could not sync PDF tests.');
+    return false;
+  }
+}
+
 function questionFileDB(){
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open('az11_question_files_v1',1);
@@ -1635,7 +1654,7 @@ function badges(){const r=getResults(),p=profileStats(),b=[];if(r.length>=1)b.pu
 
 function layout(content){
   const p=profileStats();
-  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
+  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
   return `<header>
     <div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11 <span class="version-chip">AZ11</span><br><span class="small muted">PCB • NEET Syllabus Only</span></div></div>
     <div class="header-actions">
@@ -1643,6 +1662,7 @@ function layout(content){
       <button class="btn secondary" onclick="go('fulltests')">Full Tests</button>
       <button class="btn secondary" onclick="go('chaptertests')">Chapter Tests</button>
       <button class="btn secondary" onclick="go('diagrams')">Diagram Questions</button>
+      <button class="btn secondary" onclick="go('pdftests')">PDF Tests</button>
       <button class="btn" onclick="startDaily()">Daily Challenge</button>
       <button class="btn secondary" onclick="go('account')">👤 Account</button>
       <button class="btn green" id="installAppBtn" data-install-app onclick="installPWA()">📲 Install App</button>
@@ -1695,7 +1715,7 @@ function dashboard(){
   <h1 class="page-title">Dashboard</h1>
   <div class="grid stats"><div class="card"><div class="muted">Question Bank</div><div class="metric">${allQuestions().length}</div><div class="small muted">2K+ practice variants</div></div><div class="card"><div class="muted">Available Tests</div><div class="metric">${TESTS.length}+</div><div class="small muted">Full + chapter + diagram + PYQ</div></div><div class="card"><div class="muted">Overall Accuracy</div><div class="metric">${acc}%</div></div><div class="card"><div class="muted">Best Score</div><div class="metric">${best}/80</div></div></div>
   <div class="card xp-card" style="margin-top:16px"><div class="small">YOUR JOSH MODE</div><div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap"><div><div style="font-size:30px;font-weight:900">${p.level}</div><div>${p.points} XP • ${p.streak} test streak</div></div><div><b>Next level:</b> ${p.next} XP</div></div><div class="xp-bar"><div class="xp-fill" style="width:${p.pct}%"></div></div><div class="badge-row">${badges().map(x=>`<span class="badge">${x}</span>`).join('')||'<span class="badge">Start your first test 🚀</span>'}</div></div>
-  <div class="subject-strip" style="margin-top:16px"><button class="subject-btn" onclick="quickSubject('Biology')">🧬 Biology</button><button class="subject-btn" onclick="quickSubject('Chemistry')">⚗️ Chemistry</button><button class="subject-btn" onclick="quickSubject('Physics')">⚡ Physics</button><button class="subject-btn" onclick="go('chaptertests')">📚 Chapter Wise</button><button class="subject-btn" onclick="go('diagrams')">🖼 Diagram Based</button><button class="subject-btn" onclick="go('pyq')">📜 PYQ Pattern</button></div>
+  <div class="subject-strip" style="margin-top:16px"><button class="subject-btn" onclick="quickSubject('Biology')">🧬 Biology</button><button class="subject-btn" onclick="quickSubject('Chemistry')">⚗️ Chemistry</button><button class="subject-btn" onclick="quickSubject('Physics')">⚡ Physics</button><button class="subject-btn" onclick="go('chaptertests')">📚 Chapter Wise</button><button class="subject-btn" onclick="go('diagrams')">🖼 Diagram Based</button><button class="subject-btn" onclick="go('pdftests')">📄 PDF Tests</button><button class="subject-btn" onclick="go('pyq')">📜 PYQ Pattern</button></div>
   <div class="grid" style="grid-template-columns:2fr 1fr;margin-top:16px"><div class="card"><h2>Performance Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card install-card"><h2>Install on Mobile</h2><p class="muted">When this PWA package is hosted on HTTPS, tap Install App / Add to Home Screen. The AZ11 logo will appear on the mobile home screen.</p><button class="btn green" data-install-app onclick="installPWA()">📲 Install App</button><p class="small muted">Owner diagram questions: ${myDiagrams}</p></div></div>
   <div class="card" style="margin-top:16px"><h2>Recent Performance</h2>${historyTable(r.slice(-5).reverse())}</div>`)
 }
@@ -1836,6 +1856,32 @@ function startMyDiagramTest(){
   startExam('AZ11 Diagram Questions',mine.slice(0,count),Math.max(10,count));
 }
 
+
+function pdfTestsPage(){
+  const list=getPdfTests();
+  return layout(`<h1 class="page-title">PDF Tests</h1>
+    <div class="card" style="margin-bottom:16px"><b>Owner-Published PDF Tests</b><br><span class="small muted">Open the PDF paper and answer A/B/C/D. Your answers, timer and result are saved like other AZ11 tests.</span></div>
+    ${list.length?`<div class="test-grid">${list.slice().reverse().map(t=>`<div class="test-card"><div class="small muted">${esc(t.subject||'PDF Test')}</div><h3>${esc(t.title||'PDF Test')}</h3><p>${Number(t.count)||0} Questions • ${Number(t.minutes)||0} min • +4/−1</p><button class="btn" onclick="startPdfTest('${t.id}')">Start PDF Test</button></div>`).join('')}</div>`:'<div class="card empty">Owner has not published any PDF tests yet.</div>'}`)
+}
+function startPdfTest(id){
+  const t=getPdfTests().find(x=>String(x.id)===String(id));
+  if(!t)return toast('PDF test not found. Sync again.');
+  const key=String(t.answerKey||'').toUpperCase().replace(/[^ABCD]/g,'');
+  const count=Math.max(1,Math.min(180,Number(t.count)||key.length));
+  if(key.length<count)return toast('This PDF test has an incomplete answer key.');
+  const qs=Array.from({length:count},(_,i)=>({
+    id:Number(String(t.id).replace(/\D/g,'').slice(-9)||Date.now())*1000+i+1,
+    baseId:`pdf-${t.id}-${i+1}`,
+    subject:t.subject==='NEET Full Paper'?'PCB Mixed':(t.subject||'PDF Test'),
+    paperSection:t.subject||'PDF Test',class:'11/12',chapter:t.title||'PDF Test',topic:'PDF Paper',sub:'Owner PDF Test',difficulty:'Hard',type:'PDF',source:'Owner PDF Test',
+    q:`Refer to the PDF paper and answer Question ${i+1}.`,o:['A','B','C','D'],a:key.charCodeAt(i)-65,
+    e:`Answer key: ${key[i]}. Detailed explanation is not included with this PDF test.`,concept:t.title||'PDF Test',imageOptionsOnly:true,pdfTestId:String(t.id)
+  }));
+  startExam(t.title||'AZ11 PDF Test',qs,Math.max(1,Number(t.minutes)||count));
+  state.exam.pdfTest={id:String(t.id),title:t.title||'PDF Test',fileName:t.fileName||'paper.pdf'};
+  saveSession();render();
+}
+
 function pyqPage(){
   const list=TESTS.filter(t=>t.scope==='PYQ');
   return layout(`<h1 class="page-title">PYQ Pattern Tests</h1><div class="card" style="margin-bottom:16px"><b>Note:</b> These are paraphrased NEET previous-year-pattern questions and concepts, not copied paper text.</div><div class="test-grid">${testCards(list)}</div>`)
@@ -1932,7 +1978,12 @@ function qVisual(q){
   return ''
 }
 function optionChoices(q){if(q.imageOptionsOnly){return [0,1,2,3].map(i=>`<label class="option image-choice"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div>${String.fromCharCode(65+i)}</div></label>`).join('')}return q.o.map((op,i)=>`<label class="option"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div><b>${String.fromCharCode(65+i)}.</b> ${op}</div></label>`).join('')}
-function examPage(){const q=state.exam.questions[state.current];return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div><div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`}
+function examPage(){
+  const q=state.exam.questions[state.current];
+  const pdf=state.exam.pdfTest;
+  const pdfViewer=pdf?`<div class="card" style="padding:10px;margin-bottom:14px"><div class="row" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
+  return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
+}
 function exitTest(){
   if(state.timer){clearInterval(state.timer);state.timer=null}
   clearSavedExam();
@@ -2559,8 +2610,8 @@ window.addEventListener('online',()=>{
 
 async function syncAZ11Content(){
   if(!navigator.onLine)return;
-  const [nq,nn]=await Promise.all([syncRemoteQuestions(false),syncNotesFromOwner(false)]);
-  if((nq||nn)&&state.page!=='exam'&&state.page!=='result')render();
+  const [nq,nn,np]=await Promise.all([syncRemoteQuestions(false),syncNotesFromOwner(false),syncPdfTests(false)]);
+  if((nq||nn||np)&&state.page!=='exam'&&state.page!=='result')render();
   if(accountState.user)syncPendingAttempts();
 }
 window.addEventListener('online',()=>syncAZ11Content());
@@ -2573,6 +2624,7 @@ function render(){
   else if(state.page==='fulltests'||state.page==='tests')html=fullTestsPage();
   else if(state.page==='chaptertests')html=chapterTestsPage();
   else if(state.page==='diagrams')html=diagramsPage();
+  else if(state.page==='pdftests')html=pdfTestsPage();
   else if(state.page==='pyq')html=pyqPage();
   else if(state.page==='custom')html=customPage();
   else if(state.page==='performance')html=performancePage();
@@ -2593,7 +2645,7 @@ function render(){
 }
 restoreSession();
 render();
-Promise.all([syncNotesFromOwner(false),syncRemoteQuestions(false),loadAccount()]).then(()=>{
+Promise.all([syncNotesFromOwner(false),syncRemoteQuestions(false),syncPdfTests(false),loadAccount()]).then(()=>{
   if(state.page!=='exam'&&state.page!=='result')render();
   setTimeout(renderVisibleQuestionFiles,0);
   syncPendingAttempts();
