@@ -704,6 +704,47 @@ img,svg,video,iframe{max-width:100%}
   .palette-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
+
+:root{
+  --az11-bg:#f7f9ff;
+  --az11-card:#ffffff;
+  --az11-text:#162033;
+  --az11-muted:#667085;
+  --az11-border:#dfe5ef;
+}
+body.az11-dark{
+  --az11-bg:#0f1420;
+  --az11-card:#171e2d;
+  --az11-text:#f4f7fb;
+  --az11-muted:#aab3c3;
+  --az11-border:#2a3446;
+  background:#0f1420 !important;
+  color:#f4f7fb !important;
+}
+body.az11-dark .card,
+body.az11-dark .question-card,
+body.az11-dark .sidebar,
+body.az11-dark .topbar,
+body.az11-dark .modal-content,
+body.az11-dark .option,
+body.az11-dark input,
+body.az11-dark select,
+body.az11-dark textarea{
+  background:#171e2d !important;
+  color:#f4f7fb !important;
+  border-color:#2a3446 !important;
+}
+body.az11-dark .muted,
+body.az11-dark .small,
+body.az11-dark .q-number{color:#aab3c3 !important}
+body.az11-dark .nav-item{color:#f4f7fb}
+body.az11-dark .nav-item:hover{background:#202a3d}
+.az11-streak-badge{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 10px;
+  border-radius:999px;border:1px solid var(--az11-border,#dfe5ef);
+  background:var(--az11-card,#fff);font-weight:700;font-size:13px;
+}
+
 </style>
 </head>
 <body>
@@ -1689,9 +1730,117 @@ function profileStats(){
 }
 function badges(){const r=getResults(),p=profileStats(),b=[];if(r.length>=1)b.push('First Test ✅');if(r.length>=5)b.push('5 Test Streak 🧠');if(r.some(x=>x.accuracy>=90))b.push('90% Club 🔥');if(p.points>=1600)b.push('NEET Warrior ⚔️');if(r.some(x=>x.wrong===0&&x.unattempted===0))b.push('Perfect Test 💯');return b}
 
+
+async function shareAZ11App(){
+  const shareData={
+    title:'AZ11 – NEET Practice App',
+    text:'Try AZ11 for NEET PCB practice, tests and Friend Game.',
+    url:'https://az11457rs.netlify.app/'
+  };
+  try{
+    if(navigator.share){
+      await navigator.share(shareData);
+      return;
+    }
+    if(navigator.clipboard){
+      await navigator.clipboard.writeText(shareData.url);
+      toast('AZ11 app link copied ✅');
+      return;
+    }
+  }catch(e){
+    if(e?.name==='AbortError')return;
+  }
+
+  try{
+    const t=document.createElement('textarea');
+    t.value=shareData.url;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand('copy');
+    t.remove();
+    toast('AZ11 app link copied ✅');
+  }catch(e){
+    toast('Share link: '+shareData.url);
+  }
+}
+
+
+const AZ11_THEME_KEY='az11_theme_v1';
+const AZ11_STREAK_KEY='az11_daily_streak_v1';
+
+function applyAZ11Theme(){
+  const t=localStorage.getItem(AZ11_THEME_KEY)||'light';
+  document.body.classList.toggle('az11-dark',t==='dark');
+}
+function toggleAZ11Theme(){
+  const dark=!document.body.classList.contains('az11-dark');
+  localStorage.setItem(AZ11_THEME_KEY,dark?'dark':'light');
+  applyAZ11Theme();
+  render();
+}
+function az11ThemeLabel(){
+  return document.body.classList.contains('az11-dark')?'☀️ Light Mode':'🌙 Dark Mode';
+}
+function ymdLocal(d=new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function addDaysYMD(ymd,n){
+  const [y,m,d]=ymd.split('-').map(Number);
+  const x=new Date(y,m-1,d);
+  x.setDate(x.getDate()+n);
+  return ymdLocal(x);
+}
+function updateDailyStreak(){
+  let s={last:'',streak:0,best:0,coins:0};
+  try{s={...s,...JSON.parse(localStorage.getItem(AZ11_STREAK_KEY)||'{}')}}catch(e){}
+  const today=ymdLocal();
+  if(s.last!==today){
+    if(s.last && addDaysYMD(s.last,1)===today) s.streak=Number(s.streak||0)+1;
+    else s.streak=1;
+    s.best=Math.max(Number(s.best||0),s.streak);
+    s.coins=Number(s.coins||0)+10;
+    s.last=today;
+    localStorage.setItem(AZ11_STREAK_KEY,JSON.stringify(s));
+  }
+  return s;
+}
+function getDailyStreak(){
+  let s={last:'',streak:0,best:0,coins:0};
+  try{s={...s,...JSON.parse(localStorage.getItem(AZ11_STREAK_KEY)||'{}')}}catch(e){}
+  return s;
+}
+async function shareFriendGameInvite(){
+  const code=friendGameRoom?.code||'';
+  if(!code)return;
+  const url=`https://az11457rs.netlify.app/?game=${encodeURIComponent(code)}#friendgame`;
+  const text=`Join my AZ11 Friend Game 🎮 Code: ${code}`;
+  try{
+    if(navigator.share){
+      await navigator.share({title:'AZ11 Friend Game',text,url});
+      return;
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    toast('Game invite copied ✅');
+  }catch(e){
+    if(e?.name!=='AbortError')toast(`Code: ${code}`);
+  }
+}
+async function openInviteFromUrl(){
+  try{
+    const u=new URL(location.href);
+    const code=(u.searchParams.get('game')||'').trim().toUpperCase();
+    if(code){
+      localStorage.setItem(FRIEND_GAME_CODE_KEY,code);
+      if(accountState?.user && state?.page==='friendgame'){
+        setTimeout(()=>refreshFriendGame(true),150);
+      }
+    }
+  }catch(e){}
+}
+
 function layout(content){
   const p=profileStats();
-  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('friendgame','🎮 Friend Game')}${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
+  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('friendgame','🎮 Friend Game')}<button class="nav-item" onclick="shareAZ11App();toggleMobileMenu(false)">📤 Share App</button><button class="nav-item" onclick="toggleAZ11Theme();toggleMobileMenu(false)">🌓 Theme</button>${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
   return `<header>
     <div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11 <span class="version-chip">AZ11</span><br><span class="small muted">PCB • NEET Syllabus Only</span></div></div>
     <div class="header-actions">
@@ -1702,6 +1851,9 @@ function layout(content){
       <button class="btn secondary" onclick="go('pdftests')">PDF Tests</button>
       <button class="btn" onclick="startDaily()">Daily Challenge</button>
       <button class="btn secondary" onclick="go('friendgame')">🎮 Friend Game</button>
+      <span class="az11-streak-badge" title="Daily streak">${(()=>{const s=getDailyStreak();return `🔥 ${s.streak||0} day • 🪙 ${s.coins||0}`})()}</span>
+      <button class="btn secondary" onclick="shareAZ11App()">📤 Share App</button>
+      <button class="btn secondary" onclick="toggleAZ11Theme()">${az11ThemeLabel()}</button>
       <button class="btn secondary" onclick="go('account')">👤 Account</button>
       <button class="btn green" id="installAppBtn" data-install-app onclick="installPWA()">📲 Install App</button>
     </div>
@@ -2798,6 +2950,19 @@ async function leaveFriendGame(){
   render();
 }
 
+
+async function rematchFriendGame(){
+  const oldCode=friendGameRoom?.code||'';
+  try{
+    if(oldCode)await friendGameApi({action:'leave',code:oldCode});
+  }catch(e){}
+  stopFriendGamePolling();
+  friendGameRoom=null;
+  friendGameLastReactionId='';
+  localStorage.removeItem(FRIEND_GAME_CODE_KEY);
+  await createFriendGame();
+}
+
 async function answerFriendGame(index,choice){
   if(!friendGameRoom?.code)return;
   try{
@@ -2849,6 +3014,39 @@ function friendReactionBar(room){
   </div>`;
 }
 
+
+let FRIEND_LEADERBOARD_CACHE=[];
+let FRIEND_LEADERBOARD_FETCHING=false;
+
+async function loadFriendLeaderboard(){
+  if(FRIEND_LEADERBOARD_FETCHING)return;
+  FRIEND_LEADERBOARD_FETCHING=true;
+  try{
+    const d=await friendGameApi({action:'leaderboard'});
+    FRIEND_LEADERBOARD_CACHE=Array.isArray(d.leaderboard)?d.leaderboard:[];
+    if(state.page==='friendgame')render();
+  }catch(e){}
+  FRIEND_LEADERBOARD_FETCHING=false;
+}
+function friendLeaderboardCard(){
+  if(!FRIEND_LEADERBOARD_CACHE.length){
+    setTimeout(()=>loadFriendLeaderboard(),0);
+    return `<div class="card" style="margin-top:14px"><h2>🏆 Friends Leaderboard</h2><p class="small muted">Play completed Friend Games to appear here.</p></div>`;
+  }
+  return `<div class="card" style="margin-top:14px">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">🏆 Friends Leaderboard</h2>
+      <button class="btn secondary" onclick="loadFriendLeaderboard()">Refresh</button>
+    </div>
+    <div style="margin-top:10px">
+      ${FRIEND_LEADERBOARD_CACHE.slice(0,10).map((p,i)=>`<div class="row" style="justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--az11-border,#e5e7eb)">
+        <div><b>#${i+1} ${esc(p.displayName||p.username)}</b></div>
+        <div class="small">${p.wins||0} wins • ${p.points||0} pts • ${p.games||0} games</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 function friendGamePage(){
   if(!accountState.user){
     return layout(`<h1 class="page-title">🎮 Friend Game</h1>
@@ -2879,7 +3077,7 @@ function friendGamePage(){
           <label>Game Code<input id="friendCode" maxlength="6" placeholder="ABC123" style="text-transform:uppercase"></label><br>
           <button class="btn" onclick="joinFriendGame()">Join Game</button>
         </div>
-      </div>`)
+      </div>${friendLeaderboardCard()}`)
   }
 
   const r=friendGameRoom,me=r.me||{},players=r.players||[],my=me.answers||{};
@@ -2896,6 +3094,7 @@ function friendGamePage(){
       </div>
       <div class="row" style="gap:8px">
         <button class="btn secondary" onclick="copyFriendGameCode()">📋 Copy Code</button>
+        <button class="btn secondary" onclick="shareFriendGameInvite()">📤 Invite Friend</button>
         <button class="btn red" onclick="leaveFriendGame()">Leave</button>
       </div>
     </div>
@@ -2930,7 +3129,7 @@ function friendGamePage(){
       <h2>Game Complete</h2>
       <p>${msg}</p>
       <p><b>Your score:</b> ${me.score}/${r.questionIds.length}</p>
-      ${allFinished?'<button class="btn green" onclick="leaveFriendGame()">🎲 New Random Game</button>':''}
+      ${allFinished?'<button class="btn green" onclick="rematchFriendGame()">🔁 Rematch • New Random Questions</button>':''}
     </div>`;
     return layout(`<h1 class="page-title">🎮 Friend Game</h1>${body}`)
   }
@@ -3080,7 +3279,10 @@ Promise.all([syncNotesFromOwner(false),syncRemoteQuestions(false),syncPdfTests(f
   syncPendingAttempts();
 });
 syncNotesFromOwner(false).then(ok=>{
-  if(ok && state.page==='notes'){render();setTimeout(renderSyncedNoteAttachments,0)}
+  if(ok && state.page==='notes'){updateDailyStreak();
+applyAZ11Theme();
+setTimeout(openInviteFromUrl,200);
+render();setTimeout(renderSyncedNoteAttachments,0)}
 });
 if(state.page==='exam'&&state.exam){
   syncExamClock();
