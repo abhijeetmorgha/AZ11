@@ -66,13 +66,57 @@ export default async req=>{
   }
 
   if(req.method==="GET" || req.method==="HEAD"){
-    const meta=await store.get(`meta-${id}`,{type:"json",consistency:"strong"});
+    const newMeta=await store.get(`meta-${id}`,{type:"json",consistency:"strong"});
+    const oldMeta=await store.get(`filemeta-${id}`,{type:"json",consistency:"strong"});
+    const meta=newMeta?.total ? {
+      total:Number(newMeta.total)||0,
+      size:Number(newMeta.size)||0,
+      fileName:newMeta.fileName||"paper.pdf",
+      layout:"new"
+    } : (oldMeta?.complete ? {
+      total:Number(oldMeta.chunks)||0,
+      size:Number(oldMeta.totalSize)||0,
+      fileName:oldMeta.fileName||"paper.pdf",
+      layout:"old"
+    } : null);
+
+    // Compatibility metadata endpoint used by older cached AZ11 clients.
+    if(u.searchParams.get("meta")==="1"){
+      if(meta?.total){
+        return J({
+          chunked:true,
+          chunks:meta.total,
+          totalSize:meta.size,
+          fileName:meta.fileName
+        });
+      }
+      const legacy=await store.get(`file-${id}`,{type:"arrayBuffer",consistency:"strong"});
+      if(legacy?.byteLength)return J({chunked:false,totalSize:legacy.byteLength,fileName:"paper.pdf"});
+      return J({error:"PDF not found"},404);
+    }
+
+    // Compatibility per-part endpoint used by older cached AZ11 clients.
+    if(u.searchParams.has("part")){
+      const p=Number(u.searchParams.get("part"));
+      if(!meta?.total||!Number.isInteger(p)||p<0||p>=meta.total){
+        return new Response("PDF part not found",{status:404});
+      }
+      const key=meta.layout==="new" ? `chunk-${id}-${p}` : `file-${id}-part-${p}`;
+      const data=await store.get(key,{type:"arrayBuffer",consistency:"strong"});
+      if(!data||data.byteLength===0)return new Response("PDF part not found",{status:404});
+      return new Response(data,{headers:{
+        "content-type":"application/octet-stream",
+        "cache-control":"public,max-age=300"
+      }});
+    }
+
+    // New clients can open the PDF directly. Stream stored chunks in order.
     if(meta?.total){
       const headers={
         "content-type":"application/pdf",
         "content-disposition":`inline; filename="${String(meta.fileName||"AZ11-paper.pdf").replace(/["\r\n]/g,"")}"`,
         "cache-control":"public,max-age=300",
-        "content-length":String(meta.size||"")
+        ...(meta.size?{"content-length":String(meta.size)}:{})
       };
       if(req.method==="HEAD")return new Response(null,{headers});
 
@@ -81,7 +125,8 @@ export default async req=>{
         async pull(controller){
           if(i>=meta.total){controller.close();return}
           try{
-            const ab=await store.get(`chunk-${id}-${i}`,{type:"arrayBuffer",consistency:"strong"});
+            const key=meta.layout==="new" ? `chunk-${id}-${i}` : `file-${id}-part-${i}`;
+            const ab=await store.get(key,{type:"arrayBuffer",consistency:"strong"});
             if(!ab||!ab.byteLength){controller.error(new Error("Missing PDF chunk"));return}
             controller.enqueue(new Uint8Array(ab));
             i++;
@@ -91,10 +136,17 @@ export default async req=>{
       return new Response(stream,{headers});
     }
 
+    // Very old small-PDF storage.
     const data=await store.get(`file-${id}`,{type:"arrayBuffer",consistency:"strong"});
     if(!data||data.byteLength===0)return new Response("PDF not found",{status:404});
-    if(req.method==="HEAD")return new Response(null,{headers:{"content-type":"application/pdf","content-length":String(data.byteLength),"cache-control":"public,max-age=300"}});
-    return new Response(data,{headers:{"content-type":"application/pdf","content-disposition":"inline; filename=AZ11-paper.pdf","cache-control":"public,max-age=300"}});
+    const headers={
+      "content-type":"application/pdf",
+      "content-disposition":"inline; filename=AZ11-paper.pdf",
+      "content-length":String(data.byteLength),
+      "cache-control":"public,max-age=300"
+    };
+    if(req.method==="HEAD")return new Response(null,{headers});
+    return new Response(data,{headers});
   }
 
   return J({error:"Method not allowed."},405)

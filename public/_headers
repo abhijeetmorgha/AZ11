@@ -8,3 +8,6 @@
   Cache-Control: no-cache, no-store, must-revalidate
 /api/*
   Cache-Control: no-cache, no-store, must-revalidate
+
+/admin-manifest.webmanifest
+  Cache-Control: no-cache, must-revalidate

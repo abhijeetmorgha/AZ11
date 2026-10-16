@@ -667,6 +667,43 @@ aside{
 .sync-pill{padding:6px 9px;border-radius:999px;background:#ecfdf3;color:#166534;font-size:11px;font-weight:900}
 @media(max-width:720px){.az11-grid4{grid-template-columns:1fr 1fr}.login-grid{grid-template-columns:1fr}.az11-hero h1{font-size:27px}}
 
+
+/* ===== AZ11 MOBILE FULL-FIT FIX ===== */
+html,body,#app{max-width:100%;overflow-x:hidden}
+.layout,main,.grid,.stats,.test-grid,.exam-wrap,.exam-grid,.question-card,.palette,.card,.filters,.row,.header-actions,.subject-strip,.section-tabs{min-width:0;max-width:100%}
+img,svg,video,iframe{max-width:100%}
+.card,.question-card,.review-card,.q-text,.q-number,.small,.muted,p,h1,h2,h3{overflow-wrap:anywhere;word-break:break-word}
+.filters input,.filters select,.form input,.form select,.form textarea{max-width:100%;min-width:0}
+.pdf-test-viewer{width:100%;max-width:100%;overflow:hidden}
+.pdf-test-head{min-width:0;max-width:100%}
+@media(max-width:640px){
+  header{padding:9px 10px;gap:8px;flex-wrap:wrap}
+  .brand{min-width:0;max-width:calc(100% - 56px);align-items:flex-start}
+  .brand>div:last-child{min-width:0;overflow-wrap:anywhere}
+  .logo{width:40px;height:40px;flex:0 0 40px}
+  .header-actions{width:100%;justify-content:flex-start;gap:6px}
+  .header-actions .btn{flex:1 1 120px;min-width:0;padding:9px 8px;font-size:13px;white-space:normal}
+  main{padding:10px;width:100%}
+  .card{padding:13px;border-radius:14px}
+  .page-title{font-size:23px;line-height:1.2}
+  .subject-strip,.section-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;width:100%}
+  .subject-btn,.section-tabs .btn{width:100%;min-width:0;white-space:normal;padding:9px 7px}
+  .exam-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .exam-actions .btn{width:100%;min-width:0;white-space:normal;padding:9px 7px}
+  .palette-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  .qbtn{min-width:0;padding:8px 0}
+  .pdf-test-head{display:flex!important;flex-direction:column;align-items:stretch!important;gap:8px}
+  .pdf-test-head .btn{width:100%;text-align:center}
+  .pdf-test-viewer iframe{width:100%;height:52vh;min-height:300px}
+  .test-card .btn{width:100%;white-space:normal}
+  .mobile-drawer{width:min(92vw,330px);max-width:100vw}
+}
+@media(max-width:380px){
+  .subject-strip,.section-tabs{grid-template-columns:1fr}
+  .exam-actions{grid-template-columns:1fr}
+  .palette-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
 </style>
 </head>
 <body>
@@ -684,6 +721,7 @@ remoteQuestions:'az11_remote_questions_v1',
 pdfTests:'az11_pdf_tests_v1',
 questionFiles:'az11_question_files_v1',
 pendingAttempts:'az11_pending_attempts_v1',
+lastResult:'az11_last_result_v1',
 session:'az11_exam_session_v1'
 };
 
@@ -1218,8 +1256,33 @@ const AZ11_FULL_BANK=[{"subject":"Physics","paperSection":"Physics","chapter":"U
 
 
 function clone(x){return JSON.parse(JSON.stringify(x))}
-function getResults(){return JSON.parse(localStorage.getItem(STORE.results)||'[]')}
-function saveResults(v){localStorage.setItem(STORE.results,JSON.stringify(v))}
+function getResults(){
+  try{
+    const v=JSON.parse(localStorage.getItem(STORE.results)||'[]');
+    return Array.isArray(v)?v:[];
+  }catch(e){return []}
+}
+function storageResult(r,keepDetails=true){
+  if(!r)return r;
+  const x={...r};
+  if(!keepDetails)x.details=[];
+  return x;
+}
+function saveResults(v){
+  const src=Array.isArray(v)?v:[];
+  // Keep history compact so submitting a large/180-question test never fails
+  // simply because localStorage is full. Recent tests retain explanations.
+  let arr=src.slice(-30).map((r,i,a)=>storageResult(r,i>=a.length-8));
+  try{
+    localStorage.setItem(STORE.results,JSON.stringify(arr));
+    return true;
+  }catch(e){
+    arr=src.slice(-12).map((r,i,a)=>storageResult(r,i>=a.length-4));
+    try{localStorage.setItem(STORE.results,JSON.stringify(arr));return true}catch(e2){return false}
+  }
+}
+function saveLastResult(r){try{localStorage.setItem(STORE.lastResult,JSON.stringify(r))}catch(e){}}
+function getLastResult(){try{return JSON.parse(localStorage.getItem(STORE.lastResult)||'null')}catch(e){return null}}
 function getBookmarks(){return JSON.parse(localStorage.getItem(STORE.bookmarks)||'[]')}
 function saveBookmarks(v){localStorage.setItem(STORE.bookmarks,JSON.stringify(v))}
 
@@ -1595,10 +1658,10 @@ function restoreSession(){
     state.page=validPages.has(snap.page)?snap.page:'dashboard';
 
     if(snap.lastResultId){
-      state.lastResult=getResults().find(r=>r.id===snap.lastResultId)||null;
+      state.lastResult=getResults().find(r=>r.id===snap.lastResultId)||getLastResult()||null;
     }else if(state.page==='result'){
       const rr=getResults();
-      state.lastResult=rr.length?rr[rr.length-1]:null;
+      state.lastResult=(rr.length?rr[rr.length-1]:null)||getLastResult()||null;
     }
 
     if(snap.exam && Array.isArray(snap.exam.questions) && snap.exam.questions.length){
@@ -1775,7 +1838,7 @@ function buildTestLibrary(){
 const TESTS=buildTestLibrary();
 
 function testCards(list){
-  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No repeated base question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
+  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No exact duplicate question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
 }
 
 
@@ -1863,20 +1926,38 @@ function pdfTestsPage(){
     <div class="card" style="margin-bottom:16px"><b>Owner-Published PDF Tests</b><br><span class="small muted">Open the PDF paper and answer A/B/C/D. Your answers, timer and result are saved like other AZ11 tests.</span></div>
     ${list.length?`<div class="test-grid">${list.slice().reverse().map(t=>`<div class="test-card"><div class="small muted">${esc(t.subject||'PDF Test')}</div><h3>${esc(t.title||'PDF Test')}</h3><p>${Number(t.count)||0} Questions • ${Number(t.minutes)||0} min • +4/−1</p><button class="btn" onclick="startPdfTest('${t.id}')">Start PDF Test</button></div>`).join('')}</div>`:'<div class="card empty">Owner has not published any PDF tests yet.</div>'}`)
 }
+function pdfAnswerTokens(t){
+  if(Array.isArray(t?.answerKeyTokens)&&t.answerKeyTokens.length){
+    return t.answerKeyTokens.map(x=>String(x||'').toUpperCase());
+  }
+  const legacy=String(t?.answerKey||'').toUpperCase().replace(/[^ABCD]/g,'');
+  return [...legacy];
+}
 function startPdfTest(id){
   const t=getPdfTests().find(x=>String(x.id)===String(id));
   if(!t)return toast('PDF test not found. Sync again.');
-  const key=String(t.answerKey||'').toUpperCase().replace(/[^ABCD]/g,'');
-  const count=Math.max(1,Math.min(180,Number(t.count)||key.length));
-  if(key.length<count)return toast('This PDF test has an incomplete answer key.');
-  const qs=Array.from({length:count},(_,i)=>({
-    id:Number(String(t.id).replace(/\D/g,'').slice(-9)||Date.now())*1000+i+1,
-    baseId:`pdf-${t.id}-${i+1}`,
-    subject:t.subject==='NEET Full Paper'?'PCB Mixed':(t.subject||'PDF Test'),
-    paperSection:t.subject||'PDF Test',class:'11/12',chapter:t.title||'PDF Test',topic:'PDF Paper',sub:'Owner PDF Test',difficulty:'Hard',type:'PDF',source:'Owner PDF Test',
-    q:`Refer to the PDF paper and answer Question ${i+1}.`,o:['A','B','C','D'],a:key.charCodeAt(i)-65,
-    e:`Answer key: ${key[i]}. Detailed explanation is not included with this PDF test.`,concept:t.title||'PDF Test',imageOptionsOnly:true,pdfTestId:String(t.id)
-  }));
+  const tokens=pdfAnswerTokens(t);
+  const count=Math.max(1,Math.min(180,Number(t.count)||tokens.length));
+  if(tokens.length<count)return toast('This PDF test has an incomplete answer key.');
+
+  const qs=Array.from({length:count},(_,i)=>{
+    const token=String(tokens[i]||'').toUpperCase();
+    const dropped=token==='DROP';
+    const validAnswers=dropped?[]:token.split('/').filter(x=>/^[ABCD]$/.test(x)).map(x=>x.charCodeAt(0)-65);
+    const a=validAnswers.length?validAnswers[0]:0;
+    return {
+      id:Number(String(t.id).replace(/\D/g,'').slice(-9)||Date.now())*1000+i+1,
+      baseId:`pdf-${t.id}-${i+1}`,
+      subject:t.subject==='NEET Full Paper'?'PCB Mixed':(t.subject||'PDF Test'),
+      paperSection:t.subject||'PDF Test',
+      class:'11/12',chapter:t.title||'PDF Test',topic:'PDF Paper',sub:'Owner PDF Test',
+      difficulty:'Hard',type:'PDF',source:'Owner PDF Test',
+      q:dropped?`Question ${i+1} is marked DROP in the answer key.`:`Refer to the PDF paper and answer Question ${i+1}.`,
+      o:['A','B','C','D'],a,validAnswers,dropped,
+      e:dropped?'Dropped question: +4 marks are awarded automatically.':`Accepted answer: ${token}. Detailed explanation is not included with this PDF test.`,
+      concept:t.title||'PDF Test',imageOptionsOnly:true,pdfTestId:String(t.id)
+    }
+  });
   startExam(t.title||'AZ11 PDF Test',qs,Math.max(1,Number(t.minutes)||count));
   state.exam.pdfTest={id:String(t.id),title:t.title||'PDF Test',fileName:t.fileName||'paper.pdf'};
   saveSession();render();
@@ -1888,6 +1969,7 @@ function pyqPage(){
 }
 
 
+function questionTextKey(q){return String(q?.q||'').replace(/<[^>]*>/g,' ').trim().toLowerCase().replace(/\s+/g,' ')}
 function pickQuestions(filters={},count=20){
   const match=(q,relaxDifficulty=false)=>
     (!filters.subject||q.subject===filters.subject)&&
@@ -1902,22 +1984,30 @@ function pickQuestions(filters={},count=20){
   if(pool.length<count)pool=allQuestions().filter(q=>match(q,true));
   if(filters.chapter && !pool.length){toast('No questions available for this chapter yet.');return []}
 
-  const groups=new Map(),exact=new Set();
-  for(const q of pool){
-    const textKey=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
-    if(exact.has(textKey))continue;
-    exact.add(textKey);
-    const key=String(q.baseId||q.id);
-    if(!groups.has(key))groups.set(key,[]);
-    groups.get(key).push(q);
-  }
-  const g=[...groups.values()].sort(()=>Math.random()-.5),picked=[];
-  for(const group of g){
-    picked.push(clone(group[Math.floor(Math.random()*group.length)]));
+  // Pass 1: prefer different base questions/concepts.
+  const shuffled=pool.slice().sort(()=>Math.random()-.5);
+  const usedBase=new Set(),usedText=new Set(),picked=[];
+  for(const q of shuffled){
+    const t=questionTextKey(q),b=String(q.baseId||q.id);
+    if(!t||usedText.has(t)||usedBase.has(b))continue;
+    picked.push(clone(q));usedText.add(t);usedBase.add(b);
     if(picked.length>=count)break;
   }
-  if(picked.length<count)toast(`${picked.length} unique questions available — repeats were not added.`);
-  return picked.map((x,i)=>({...x,runId:i+1}));
+
+  // Pass 2: if a chapter currently has only a few base questions, fill the
+  // requested test using other non-identical variants from the SAME pool.
+  // Exact question text is never repeated and we never borrow another chapter.
+  if(picked.length<count){
+    for(const q of shuffled){
+      const t=questionTextKey(q);
+      if(!t||usedText.has(t))continue;
+      picked.push(clone(q));usedText.add(t);
+      if(picked.length>=count)break;
+    }
+  }
+
+  if(picked.length<count)toast(`${picked.length} non-identical questions are available for this selection.`);
+  return picked.slice(0,count).map((x,i)=>({...x,runId:i+1}));
 }
 function startNamedTest(id){
   const t=TESTS.find(x=>x.id===id);
@@ -1978,48 +2068,10 @@ function qVisual(q){
   return ''
 }
 function optionChoices(q){if(q.imageOptionsOnly){return [0,1,2,3].map(i=>`<label class="option image-choice"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div>${String.fromCharCode(65+i)}</div></label>`).join('')}return q.o.map((op,i)=>`<label class="option"><input type="radio" name="opt" value="${i}" ${state.answers[state.current]===i?'checked':''} onchange="selectAns(${i})"><div><b>${String.fromCharCode(65+i)}.</b> ${op}</div></label>`).join('')}
-const AZ11_PDF_URL_CACHE=new Map();
-async function getPdfTestPaperUrl(id){
-  id=String(id||'');
-  if(AZ11_PDF_URL_CACHE.has(id))return AZ11_PDF_URL_CACHE.get(id);
-  const mr=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id)+'&meta=1&ts='+Date.now(),{cache:'no-store'});
-  if(!mr.ok)throw new Error('PDF metadata HTTP '+mr.status);
-  const meta=await mr.json();
-  if(!meta.chunked){
-    const url='/api/pdf-test-file?id='+encodeURIComponent(id);
-    AZ11_PDF_URL_CACHE.set(id,url);
-    return url;
-  }
-  const parts=[];
-  for(let i=0;i<Number(meta.chunks||0);i++){
-    const r=await fetch('/api/pdf-test-file?id='+encodeURIComponent(id)+'&part='+i,{cache:'force-cache'});
-    if(!r.ok)throw new Error('PDF part '+(i+1)+' HTTP '+r.status);
-    parts.push(await r.arrayBuffer());
-  }
-  const url=URL.createObjectURL(new Blob(parts,{type:'application/pdf'}));
-  AZ11_PDF_URL_CACHE.set(id,url);
-  return url;
-}
-async function renderPdfTestPaper(){
-  const box=document.querySelector('[data-pdf-test-viewer]');
-  if(!box||!state.exam?.pdfTest)return;
-  const id=String(box.getAttribute('data-pdf-test-viewer')||state.exam.pdfTest.id||'');
-  const open=document.getElementById('az11PdfOpen');
-  box.innerHTML='<div class="small muted" style="padding:18px">Loading PDF paper…</div>';
-  try{
-    const url=await getPdfTestPaperUrl(id);
-    if(open){open.href=url;open.target='_blank';open.textContent='Open PDF'}
-    box.innerHTML=`<iframe src="${url}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;background:#fff"></iframe>`;
-  }catch(e){
-    console.error(e);
-    box.innerHTML='<div class="small muted" style="padding:18px">⚠️ PDF could not load. Check internet once and reopen the test.</div>';
-    if(open){open.removeAttribute('href');open.textContent='PDF unavailable'}
-  }
-}
 function examPage(){
   const q=state.exam.questions[state.current];
   const pdf=state.exam.pdfTest;
-  const pdfViewer=pdf?`<div class="card" style="padding:10px;margin-bottom:14px"><div class="row" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a id="az11PdfOpen" class="btn secondary" href="#">Loading PDF…</a></div><div data-pdf-test-viewer="${esc(String(pdf.id))}" style="margin-top:10px"><div class="small muted" style="padding:18px">Loading PDF paper…</div></div></div>`:'';
+  const pdfViewer=pdf?`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px"><div class="row pdf-test-head" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
   return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
 }
 function exitTest(){
@@ -2032,7 +2084,7 @@ function exitTest(){
   setTimeout(()=>toast('Test exited'),50);
 }
 function selectAns(i){state.answers[state.current]=i;saveSession();renderExamOnly()}
-function renderExamOnly(){document.getElementById('app').innerHTML=examPage();setTimeout(renderVisibleQuestionFiles,0);if(state.exam?.pdfTest)setTimeout(renderPdfTestPaper,0)}
+function renderExamOnly(){document.getElementById('app').innerHTML=examPage();setTimeout(renderVisibleQuestionFiles,0)}
 function prevQ(){if(state.current>0)state.current--;saveSession();renderExamOnly()}
 function nextQ(){if(state.current<state.exam.questions.length-1)state.current++;saveSession();renderExamOnly()}
 function clearAns(){state.answers[state.current]=null;saveSession();renderExamOnly()}
@@ -2040,46 +2092,87 @@ function markReview(){state.review[state.current]=true;if(state.current<state.ex
 function jumpQ(i){state.current=i;saveSession();renderExamOnly()}
 
 function submitExam(auto=false){
+  if(!state.exam||state.submitting)return;
   if(!auto&&!confirm('Submit the test now?'))return;
-  if(state.timer){clearInterval(state.timer);state.timer=null}
-  syncExamClock();
-  const qs=state.exam.questions;
-  let correct=0,wrong=0,unattempted=0;
-  const details=qs.map((q,i)=>{
-    const ans=state.answers[i];
-    let status='unattempted';
-    if(ans===null)unattempted++;
-    else if(ans===q.a){correct++;status='correct'}
-    else{wrong++;status='wrong'}
-    return{q,ans,status}
-  });
-  const score=correct*4-wrong;
-  const used=Math.max(0,state.exam.minutes*60-state.seconds);
-  const accuracy=Math.round(correct/qs.length*100);
-  const timeBonus=Math.max(0,Math.min(80,Math.floor(state.seconds/15)));
-  const points=Math.max(0,correct*20-wrong*5+(accuracy>=90?120:accuracy>=80?70:accuracy>=70?35:0)+timeBonus);
-  const result={id:Date.now(),name:state.exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,details};
-  const arr=getResults();arr.push(result);saveResults(arr);
-  state.lastResult=result;
-  syncAttemptToAccount(result);
-  clearSavedExam();
-  state.page='result';
-  saveSession();
-  render();
+  state.submitting=true;
+  try{
+    if(state.timer){clearInterval(state.timer);state.timer=null}
+    syncExamClock();
+    const exam=state.exam;
+    const qs=exam.questions||[];
+    let correct=0,wrong=0,unattempted=0;
+    const details=qs.map((q,i)=>{
+      const ans=state.answers[i];
+      let status='unattempted';
+      if(q.dropped){correct++;status='correct'}
+      else if(ans===null||ans===undefined)unattempted++;
+      else if(Array.isArray(q.validAnswers)&&q.validAnswers.length?q.validAnswers.includes(ans):ans===q.a){correct++;status='correct'}
+      else{wrong++;status='wrong'}
+      return{q,ans:ans===undefined?null:ans,status}
+    });
+    const score=correct*4-wrong;
+    const used=Math.max(0,exam.minutes*60-state.seconds);
+    const accuracy=qs.length?Math.round(correct/qs.length*100):0;
+    const timeBonus=Math.max(0,Math.min(80,Math.floor(state.seconds/15)));
+    const points=Math.max(0,correct*20-wrong*5+(accuracy>=90?120:accuracy>=80?70:accuracy>=70?35:0)+timeBonus);
+    const result={id:Date.now(),name:exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,details};
+
+    // Local-first result: the result screen does NOT depend on the server.
+    state.lastResult=result;
+    saveLastResult(result);
+    const arr=getResults();arr.push(result);
+    const stored=saveResults(arr);
+
+    // Server/account syncing is background-only and cannot block the result.
+    try{syncAttemptToAccount(result)}catch(e){}
+
+    clearSavedExam();
+    state.page='result';
+    saveSession();
+    try{
+      render();
+    }catch(renderError){
+      console.error('AZ11 result render failed',renderError);
+      const app=document.getElementById('app');
+      if(app)app.innerHTML=layout(`<h1 class="page-title">Test Result</h1><div class="card"><div class="result-score">${result.score}/${result.total*4}</div><p><b>Correct:</b> ${result.correct} &nbsp; <b>Wrong:</b> ${result.wrong} &nbsp; <b>Unattempted:</b> ${result.unattempted}</p><p><b>Accuracy:</b> ${result.accuracy}%</p><button class="btn" onclick="go('dashboard')">Back to Dashboard</button></div>`);
+    }
+    window.scrollTo({top:0,left:0,behavior:'auto'});
+    setTimeout(()=>toast(stored?'Result saved ✅':'Result ready ✅ (history storage was full)'),60);
+  }catch(e){
+    console.error('AZ11 submit failed',e);
+    // Even if saving fails, show the already calculated result when possible.
+    if(state.lastResult){
+      clearSavedExam();state.page='result';saveSession();
+      try{render()}catch(_){}
+    }else{
+      state.page=state.exam?'exam':'dashboard';saveSession();try{render()}catch(_){}
+    }
+    setTimeout(()=>toast('Your test was submitted locally.'),60);
+  }finally{
+    state.submitting=false;
+  }
 }
 function performanceLabel(a){if(a>=90)return '🔥 Rank Booster! Excellent NEET control.';if(a>=80)return '⚡ Strong! Keep the streak alive.';if(a>=70)return '💪 Good fight. Fix the weak concepts.';if(a>=60)return '🎯 Improvement zone. Review explanations and retry.';return '🚀 Comeback mode. Revise concepts, then attack again.'}
 function resultPage(){const r=state.lastResult;if(!r)return layout('<div class="empty">No result available.</div>');return layout(`<h1 class="page-title">Test Result</h1><div class="grid stats"><div class="card"><div class="muted">Score</div><div class="result-score">${r.score}/${r.total*4}</div></div><div class="card"><div class="muted">Correct</div><div class="metric">${r.correct}</div></div><div class="card"><div class="muted">Wrong</div><div class="metric" style="color:var(--red)">${r.wrong}</div></div><div class="card"><div class="muted">Accuracy</div><div class="metric">${r.accuracy}%</div></div></div><div class="card xp-card" style="margin-top:16px"><div class="points-pop" style="color:white">+${r.points} XP</div><div class="josh">${performanceLabel(r.accuracy)}</div><div>Time: ${formatTime(r.used)} • Unattempted: ${r.unattempted}</div></div><h2>Question-by-Question Explanation</h2>${r.details.map((d,i)=>reviewHTML(d,i)).join('')}`)}
-function reviewHTML(d,i){const q=d.q,b=getBookmarks(),marked=b.includes(q.id);return `<div class="review-card"><button class="bookmark-btn" onclick="toggleBookmark(${q.id})">${marked?'★':'☆'}</button><div class="q-number">Q${i+1} • ${q.subject} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}<div class="${d.status==='correct'?'correct':d.status==='wrong'?'wrong':'muted'}">Status: ${d.status.toUpperCase()}</div><p><b>Your Answer:</b> ${d.ans===null?'Not Attempted':answerText(q,d.ans)}</p><p><b>Correct Answer:</b> <span class="correct">${answerText(q,q.a)}</span></p><div class="explanation"><b>Detailed Explanation:</b><br>${q.e}</div><p><b>Concept:</b> ${q.concept}</p><p class="small muted"><b>Source style:</b> ${q.source||'Original Practice'}</p></div>`}
+function answerText(q,i){
+  if(i===null||i===undefined)return 'Not Attempted';
+  const letter=String.fromCharCode(65+Number(i));
+  if(q?.imageOptionsOnly)return letter;
+  const op=Array.isArray(q?.o)?q.o[Number(i)]:'';
+  return op!==undefined&&op!==''?`${letter}. ${op}`:letter;
+}
+function correctAnswerText(q){if(q.dropped)return 'DROP (+4 awarded)';if(Array.isArray(q.validAnswers)&&q.validAnswers.length>1)return q.validAnswers.map(i=>answerText(q,i)).join(' / ');return answerText(q,q.a)}
+function reviewHTML(d,i){const q=d.q,b=getBookmarks(),marked=b.includes(q.id);return `<div class="review-card"><button class="bookmark-btn" onclick="toggleBookmark(${q.id})">${marked?'★':'☆'}</button><div class="q-number">Q${i+1} • ${q.subject} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}<div class="${d.status==='correct'?'correct':d.status==='wrong'?'wrong':'muted'}">Status: ${d.status.toUpperCase()}</div><p><b>Your Answer:</b> ${q.dropped?'Not required':(d.ans===null?'Not Attempted':answerText(q,d.ans))}</p><p><b>Correct Answer:</b> <span class="correct">${correctAnswerText(q)}</span></p><div class="explanation"><b>Detailed Explanation:</b><br>${q.e}</div><p><b>Concept:</b> ${q.concept}</p><p class="small muted"><b>Source style:</b> ${q.source||'Original Practice'}</p></div>`}
 function toggleBookmark(id){let b=getBookmarks();if(b.includes(id)){b=b.filter(x=>x!==id);toast('Bookmark removed')}else{b.push(id);toast('Question bookmarked')}saveBookmarks(b);render()}
 
 function historyTable(r){if(!r.length)return '<div class="empty">No tests attempted yet.</div>';return `<div class="table-wrap"><table><tr><th>Test</th><th>Date</th><th>Score</th><th>Accuracy</th><th>XP</th></tr>${r.map(x=>`<tr><td>${x.name}</td><td>${x.date}</td><td>${x.score}/${x.total*4}</td><td>${x.accuracy}%</td><td>+${pointsForResult(x)}</td></tr>`).join('')}</table></div>`}
 function historyPage(){return layout(`<h1 class="page-title">Test History</h1><div class="card">${historyTable(getResults().slice().reverse())}</div>`)}
-function wrongPage(){const wrong=[];getResults().forEach(r=>r.details.forEach(d=>{if(d.status==='wrong')wrong.push(d)}));return layout(`<h1 class="page-title">Wrong Question Book</h1>${wrong.length?wrong.slice().reverse().map((d,i)=>reviewHTML(d,i)).join(''):'<div class="card empty">No wrong questions yet.</div>'}`)}
+function wrongPage(){const wrong=[];getResults().forEach(r=>(r.details||[]).forEach(d=>{if(d.status==='wrong')wrong.push(d)}));return layout(`<h1 class="page-title">Wrong Question Book</h1>${wrong.length?wrong.slice().reverse().map((d,i)=>reviewHTML(d,i)).join(''):'<div class="card empty">No wrong questions yet.</div>'}`)}
 function bookmarksPage(){const ids=getBookmarks(),qs=allQuestions().filter(q=>ids.includes(q.id));return layout(`<h1 class="page-title">Bookmarked Questions</h1>${qs.length?qs.map((q,i)=>reviewHTML({q,ans:null,status:'unattempted'},i)).join(''):'<div class="card empty">No bookmarks yet.</div>'}`)}
 function myAddedPage(){const qs=getCustom();return layout(`<h1 class="page-title">My Added Questions</h1><div class="card" style="margin-bottom:16px"><b>${qs.length} questions added by you.</b><br><span class="small muted">For image/diagram questions, the options stay inside your uploaded image. Students only see clickable A / B / C / D choices.</span></div>${qs.length?qs.slice().reverse().map((q,i)=>`<div class="review-card"><div class="q-number">${q.subject} • Class ${q.class} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}${q.imageOptionsOnly?'<p><b>Student choices:</b> A &nbsp; B &nbsp; C &nbsp; D</p>':`<p><b>A.</b> ${q.o[0]}</p><p><b>B.</b> ${q.o[1]}</p><p><b>C.</b> ${q.o[2]}</p><p><b>D.</b> ${q.o[3]}</p>`}<p><b>Correct:</b> <span class="correct">${answerText(q,q.a)}</span></p><div class="explanation"><b>Explanation:</b><br>${q.e}</div><br><button class="btn red" onclick="deleteAdminQuestion(${q.id})">Delete Question</button></div>`).join(''):'<div class="card empty">You have not added any questions yet. Open Admin → Add Question.</div>'}`)}
 function deleteAdminQuestion(id){if(!confirm('Delete this added question?'))return;saveCustom(getCustom().filter(q=>q.id!==id));toast('Question deleted');render()}
 
-function performancePage(){const r=getResults();const subjectStats=['Biology','Chemistry','Physics'].map(s=>{let c=0,t=0;r.forEach(x=>x.details?.forEach(d=>{if(d.q.subject===s){t++;if(d.status==='correct')c++}}));return [s,t?Math.round(c/t*100):0]});return layout(`<h1 class="page-title">Performance</h1><div class="grid" style="grid-template-columns:2fr 1fr"><div class="card"><h2>Score Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card"><h2>Subject Accuracy</h2>${subjectStats.map(([s,a])=>`<p><b>${s}</b> — ${a}%</p><div style="height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="width:${a}%;height:100%;background:#0b3b82"></div></div>`).join('')}</div></div><div class="card" style="margin-top:16px">${historyTable(r.slice().reverse())}</div>`)}
+function performancePage(){const r=getResults();const subjectStats=['Biology','Chemistry','Physics'].map(s=>{let c=0,t=0;r.forEach(x=>(x.details||[]).forEach(d=>{if(d.q.subject===s){t++;if(d.status==='correct')c++}}));return [s,t?Math.round(c/t*100):0]});return layout(`<h1 class="page-title">Performance</h1><div class="grid" style="grid-template-columns:2fr 1fr"><div class="card"><h2>Score Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card"><h2>Subject Accuracy</h2>${subjectStats.map(([s,a])=>`<p><b>${s}</b> — ${a}%</p><div style="height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="width:${a}%;height:100%;background:#0b3b82"></div></div>`).join('')}</div></div><div class="card" style="margin-top:16px">${historyTable(r.slice().reverse())}</div>`)}
 function drawPerformanceGraph(){const c=document.getElementById('perfChart');if(!c)return;const ctx=c.getContext('2d'),r=getResults().slice(-12);ctx.clearRect(0,0,c.width,c.height);ctx.strokeStyle='#cbd5e1';ctx.lineWidth=1;for(let y=20;y<c.height-25;y+=50){ctx.beginPath();ctx.moveTo(45,y);ctx.lineTo(c.width-20,y);ctx.stroke()}ctx.fillStyle='#64748b';ctx.font='12px Arial';ctx.fillText('100%',5,24);ctx.fillText('0%',18,c.height-25);if(!r.length){ctx.fillStyle='#64748b';ctx.font='16px Arial';ctx.fillText('Attempt tests to see your performance graph.',70,135);return}const left=50,right=c.width-25,top=20,bottom=c.height-30,step=r.length>1?(right-left)/(r.length-1):0;ctx.strokeStyle='#0b3b82';ctx.lineWidth=4;ctx.beginPath();r.forEach((x,i)=>{const px=left+i*step,py=bottom-(x.accuracy/100)*(bottom-top);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)});ctx.stroke();r.forEach((x,i)=>{const px=left+i*step,py=bottom-(x.accuracy/100)*(bottom-top);ctx.fillStyle='#0b3b82';ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#334155';ctx.fillText(x.accuracy+'%',Math.max(5,px-15),Math.max(14,py-10))})}
 
 
@@ -2653,6 +2746,7 @@ async function syncAZ11Content(){
   if(accountState.user)syncPendingAttempts();
 }
 window.addEventListener('online',()=>syncAZ11Content());
+window.addEventListener('offline',()=>{try{toast('Offline mode: AZ11 core app and saved tests still work. New sync waits for internet.')}catch(e){}});
 setInterval(()=>{if(document.visibilityState==='visible')syncAZ11Content()},300000);
 
 function render(){
@@ -2676,7 +2770,6 @@ function render(){
   else if(state.page==='result')html=resultPage();
   document.getElementById('app').innerHTML=html;
   setTimeout(renderVisibleQuestionFiles,0);
-  if(state.page==='exam'&&state.exam?.pdfTest)setTimeout(renderPdfTestPaper,0);
   setTimeout(refreshInstallButton,0);
   if(state.page==='dashboard'||state.page==='performance')setTimeout(drawPerformanceGraph,0);
   if(state.page==='admin')setTimeout(toggleAdminOptions,0);

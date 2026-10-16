@@ -1,10 +1,10 @@
 {
-  "id": "./",
+  "id": "/az11-public-app",
   "name": "AZ11",
   "short_name": "AZ11",
   "description": "AZ11 NEET PCB practice app",
-  "start_url": "./index.html?build=az11-final-v1",
-  "scope": "./",
+  "start_url": "/index.html?app=public&v=stable-v8",
+  "scope": "/",
   "display": "standalone",
   "display_override": [
     "standalone",
