@@ -704,6 +704,14 @@ img,svg,video,iframe{max-width:100%}
   .palette-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
+
+/* AZ11 reliable PDF mobile view */
+@media(max-width:900px){
+  .pdf-test-viewer{overflow:visible!important}
+  .pdf-test-head{display:block!important}
+  .pdf-test-head .btn{width:100%!important;min-height:44px}
+}
+
 </style>
 </head>
 <body>
@@ -1933,7 +1941,26 @@ function pdfAnswerTokens(t){
   const legacy=String(t?.answerKey||'').toUpperCase().replace(/[^ABCD]/g,'');
   return [...legacy];
 }
+
+function az11PdfUrl(id){
+  return `/api/pdf-test-file?id=${encodeURIComponent(id)}&v=${Date.now()}`;
+}
+function az11MobilePdfMode(){
+  return window.matchMedia('(max-width: 900px)').matches ||
+         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+function openPdfPaper(id){
+  const url=az11PdfUrl(id);
+  const w=window.open(url,'_blank');
+  if(!w){
+    const a=document.createElement('a');
+    a.href=url;a.target='_blank';a.rel='noopener';
+    document.body.appendChild(a);a.click();a.remove();
+  }
+}
+
 function startPdfTest(id){
+  const mobilePaperWindow=az11MobilePdfMode()?window.open('about:blank','_blank'):null;
   const t=getPdfTests().find(x=>String(x.id)===String(id));
   if(!t)return toast('PDF test not found. Sync again.');
   const tokens=pdfAnswerTokens(t);
@@ -1961,6 +1988,15 @@ function startPdfTest(id){
   startExam(t.title||'AZ11 PDF Test',qs,Math.max(1,Number(t.minutes)||count));
   state.exam.pdfTest={id:String(t.id),title:t.title||'PDF Test',fileName:t.fileName||'paper.pdf'};
   saveSession();render();
+
+  if(az11MobilePdfMode()){
+    const url=az11PdfUrl(t.id);
+    if(mobilePaperWindow){
+      try{mobilePaperWindow.location.href=url}catch(e){openPdfPaper(t.id)}
+    }else{
+      setTimeout(()=>toast('Tap “Open PDF Paper” to view the paper.'),100);
+    }
+  }
 }
 
 function pyqPage(){
@@ -2071,7 +2107,23 @@ function optionChoices(q){if(q.imageOptionsOnly){return [0,1,2,3].map(i=>`<label
 function examPage(){
   const q=state.exam.questions[state.current];
   const pdf=state.exam.pdfTest;
-  const pdfViewer=pdf?`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px"><div class="row pdf-test-head" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
+  const pdfViewer=pdf?(
+    az11MobilePdfMode()
+      ?`<div class="card pdf-test-viewer" style="padding:12px;margin-bottom:14px">
+          <div class="pdf-test-head">
+            <b>📄 ${esc(pdf.title||'PDF Paper')}</b>
+            <div class="small muted" style="margin:7px 0 10px">Mobile वर paper वेगळ्या tab मध्ये उघडतो. AZ11 मध्ये परत येऊन A/B/C/D answer select करा.</div>
+            <button class="btn secondary" style="width:100%" onclick="openPdfPaper('${pdf.id}')">📄 Open PDF Paper</button>
+          </div>
+        </div>`
+      :`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px">
+          <div class="row pdf-test-head" style="justify-content:space-between;align-items:center">
+            <b>📄 ${esc(pdf.title||'PDF Paper')}</b>
+            <button class="btn secondary" onclick="openPdfPaper('${pdf.id}')">Open PDF</button>
+          </div>
+          <iframe src="${az11PdfUrl(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe>
+        </div>`
+  ):'';
   return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
 }
 function exitTest(){

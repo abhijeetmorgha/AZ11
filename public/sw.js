@@ -1,4 +1,4 @@
-const CACHE='az11-stable-v8';
+const CACHE='az11-pdf-open-v9';
 const STATIC=['/','/index.html','/owner-az11.html','/manifest.webmanifest','/admin-manifest.webmanifest','/logo.png','/icon-192.png','/icon-512.png'];
 self.addEventListener('install',e=>{
   self.skipWaiting();

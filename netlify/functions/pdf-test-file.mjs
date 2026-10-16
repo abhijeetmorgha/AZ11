@@ -80,73 +80,86 @@ export default async req=>{
       layout:"old"
     } : null);
 
-    // Compatibility metadata endpoint used by older cached AZ11 clients.
     if(u.searchParams.get("meta")==="1"){
-      if(meta?.total){
-        return J({
-          chunked:true,
-          chunks:meta.total,
-          totalSize:meta.size,
-          fileName:meta.fileName
-        });
-      }
+      if(meta?.total)return J({chunked:true,chunks:meta.total,totalSize:meta.size,fileName:meta.fileName});
       const legacy=await store.get(`file-${id}`,{type:"arrayBuffer",consistency:"strong"});
       if(legacy?.byteLength)return J({chunked:false,totalSize:legacy.byteLength,fileName:"paper.pdf"});
       return J({error:"PDF not found"},404);
     }
 
-    // Compatibility per-part endpoint used by older cached AZ11 clients.
     if(u.searchParams.has("part")){
       const p=Number(u.searchParams.get("part"));
-      if(!meta?.total||!Number.isInteger(p)||p<0||p>=meta.total){
-        return new Response("PDF part not found",{status:404});
-      }
-      const key=meta.layout==="new" ? `chunk-${id}-${p}` : `file-${id}-part-${p}`;
+      if(!meta?.total||!Number.isInteger(p)||p<0||p>=meta.total)return new Response("PDF part not found",{status:404});
+      const key=meta.layout==="new"?`chunk-${id}-${p}`:`file-${id}-part-${p}`;
       const data=await store.get(key,{type:"arrayBuffer",consistency:"strong"});
-      if(!data||data.byteLength===0)return new Response("PDF part not found",{status:404});
+      if(!data||!data.byteLength)return new Response("PDF part not found",{status:404});
       return new Response(data,{headers:{
         "content-type":"application/octet-stream",
         "cache-control":"public,max-age=300"
       }});
     }
 
-    // New clients can open the PDF directly. Stream stored chunks in order.
-    if(meta?.total){
-      const headers={
-        "content-type":"application/pdf",
-        "content-disposition":`inline; filename="${String(meta.fileName||"AZ11-paper.pdf").replace(/["\r\n]/g,"")}"`,
-        "cache-control":"public,max-age=300",
-        ...(meta.size?{"content-length":String(meta.size)}:{})
-      };
-      if(req.method==="HEAD")return new Response(null,{headers});
-
-      let i=0;
-      const stream=new ReadableStream({
-        async pull(controller){
-          if(i>=meta.total){controller.close();return}
-          try{
-            const key=meta.layout==="new" ? `chunk-${id}-${i}` : `file-${id}-part-${i}`;
-            const ab=await store.get(key,{type:"arrayBuffer",consistency:"strong"});
-            if(!ab||!ab.byteLength){controller.error(new Error("Missing PDF chunk"));return}
-            controller.enqueue(new Uint8Array(ab));
-            i++;
-          }catch(e){controller.error(e)}
+    async function readAllPdf(){
+      if(meta?.total){
+        const parts=[];
+        let totalBytes=0;
+        for(let i=0;i<meta.total;i++){
+          const key=meta.layout==="new"?`chunk-${id}-${i}`:`file-${id}-part-${i}`;
+          const ab=await store.get(key,{type:"arrayBuffer",consistency:"strong"});
+          if(!ab||!ab.byteLength)throw new Error("Missing PDF chunk");
+          parts.push(new Uint8Array(ab));
+          totalBytes+=ab.byteLength;
         }
-      });
-      return new Response(stream,{headers});
+        const out=new Uint8Array(totalBytes);
+        let off=0;
+        for(const p of parts){out.set(p,off);off+=p.byteLength}
+        return {bytes:out,fileName:meta.fileName||"AZ11-paper.pdf"};
+      }
+      const ab=await store.get(`file-${id}`,{type:"arrayBuffer",consistency:"strong"});
+      if(!ab||!ab.byteLength)return null;
+      return {bytes:new Uint8Array(ab),fileName:"AZ11-paper.pdf"};
     }
 
-    // Very old small-PDF storage.
-    const data=await store.get(`file-${id}`,{type:"arrayBuffer",consistency:"strong"});
-    if(!data||data.byteLength===0)return new Response("PDF not found",{status:404});
-    const headers={
+    let pdf;
+    try{pdf=await readAllPdf()}catch(e){return new Response("PDF unavailable",{status:404})}
+    if(!pdf)return new Response("PDF not found",{status:404});
+
+    const totalSize=pdf.bytes.byteLength;
+    const safeName=String(pdf.fileName||"AZ11-paper.pdf").replace(/["\r\n]/g,"");
+    const baseHeaders={
       "content-type":"application/pdf",
-      "content-disposition":"inline; filename=AZ11-paper.pdf",
-      "content-length":String(data.byteLength),
+      "content-disposition":`inline; filename="${safeName}"`,
+      "accept-ranges":"bytes",
       "cache-control":"public,max-age=300"
     };
-    if(req.method==="HEAD")return new Response(null,{headers});
-    return new Response(data,{headers});
+
+    if(req.method==="HEAD"){
+      return new Response(null,{status:200,headers:{...baseHeaders,"content-length":String(totalSize)}})
+    }
+
+    const range=req.headers.get("range");
+    if(range){
+      const m=range.match(/bytes=(\d*)-(\d*)/);
+      if(m){
+        let start=m[1]?Number(m[1]):0;
+        let finish=m[2]?Number(m[2]):totalSize-1;
+        if(!Number.isFinite(start)||!Number.isFinite(finish)||start<0||finish<start||start>=totalSize){
+          return new Response(null,{status:416,headers:{"content-range":`bytes */${totalSize}`}});
+        }
+        finish=Math.min(finish,totalSize-1);
+        const chunk=pdf.bytes.slice(start,finish+1);
+        return new Response(chunk,{status:206,headers:{
+          ...baseHeaders,
+          "content-range":`bytes ${start}-${finish}/${totalSize}`,
+          "content-length":String(chunk.byteLength)
+        }});
+      }
+    }
+
+    return new Response(pdf.bytes,{status:200,headers:{
+      ...baseHeaders,
+      "content-length":String(totalSize)
+    }});
   }
 
   return J({error:"Method not allowed."},405)
