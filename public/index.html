@@ -704,14 +704,6 @@ img,svg,video,iframe{max-width:100%}
   .palette-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 
-
-/* AZ11 reliable PDF mobile view */
-@media(max-width:900px){
-  .pdf-test-viewer{overflow:visible!important}
-  .pdf-test-head{display:block!important}
-  .pdf-test-head .btn{width:100%!important;min-height:44px}
-}
-
 </style>
 </head>
 <body>
@@ -729,7 +721,6 @@ remoteQuestions:'az11_remote_questions_v1',
 pdfTests:'az11_pdf_tests_v1',
 questionFiles:'az11_question_files_v1',
 pendingAttempts:'az11_pending_attempts_v1',
-lastResult:'az11_last_result_v1',
 session:'az11_exam_session_v1'
 };
 
@@ -1264,33 +1255,8 @@ const AZ11_FULL_BANK=[{"subject":"Physics","paperSection":"Physics","chapter":"U
 
 
 function clone(x){return JSON.parse(JSON.stringify(x))}
-function getResults(){
-  try{
-    const v=JSON.parse(localStorage.getItem(STORE.results)||'[]');
-    return Array.isArray(v)?v:[];
-  }catch(e){return []}
-}
-function storageResult(r,keepDetails=true){
-  if(!r)return r;
-  const x={...r};
-  if(!keepDetails)x.details=[];
-  return x;
-}
-function saveResults(v){
-  const src=Array.isArray(v)?v:[];
-  // Keep history compact so submitting a large/180-question test never fails
-  // simply because localStorage is full. Recent tests retain explanations.
-  let arr=src.slice(-30).map((r,i,a)=>storageResult(r,i>=a.length-8));
-  try{
-    localStorage.setItem(STORE.results,JSON.stringify(arr));
-    return true;
-  }catch(e){
-    arr=src.slice(-12).map((r,i,a)=>storageResult(r,i>=a.length-4));
-    try{localStorage.setItem(STORE.results,JSON.stringify(arr));return true}catch(e2){return false}
-  }
-}
-function saveLastResult(r){try{localStorage.setItem(STORE.lastResult,JSON.stringify(r))}catch(e){}}
-function getLastResult(){try{return JSON.parse(localStorage.getItem(STORE.lastResult)||'null')}catch(e){return null}}
+function getResults(){return JSON.parse(localStorage.getItem(STORE.results)||'[]')}
+function saveResults(v){localStorage.setItem(STORE.results,JSON.stringify(v))}
 function getBookmarks(){return JSON.parse(localStorage.getItem(STORE.bookmarks)||'[]')}
 function saveBookmarks(v){localStorage.setItem(STORE.bookmarks,JSON.stringify(v))}
 
@@ -1662,14 +1628,14 @@ function restoreSession(){
     const snap=JSON.parse(raw);
     if(!snap||typeof snap!=='object')return false;
 
-    const validPages=new Set(['dashboard','fulltests','tests','chaptertests','diagrams','pyq','custom','performance','history','wrong','bookmarks','notes','account','about','exam','result']);
+    const validPages=new Set(['dashboard','fulltests','tests','chaptertests','diagrams','pdftests','pyq','custom','friendgame','performance','history','wrong','bookmarks','notes','account','about','exam','result']);
     state.page=validPages.has(snap.page)?snap.page:'dashboard';
 
     if(snap.lastResultId){
-      state.lastResult=getResults().find(r=>r.id===snap.lastResultId)||getLastResult()||null;
+      state.lastResult=getResults().find(r=>r.id===snap.lastResultId)||null;
     }else if(state.page==='result'){
       const rr=getResults();
-      state.lastResult=(rr.length?rr[rr.length-1]:null)||getLastResult()||null;
+      state.lastResult=rr.length?rr[rr.length-1]:null;
     }
 
     if(snap.exam && Array.isArray(snap.exam.questions) && snap.exam.questions.length){
@@ -1725,7 +1691,7 @@ function badges(){const r=getResults(),p=profileStats(),b=[];if(r.length>=1)b.pu
 
 function layout(content){
   const p=profileStats();
-  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
+  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('friendgame','🎮 Friend Game')}${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
   return `<header>
     <div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11 <span class="version-chip">AZ11</span><br><span class="small muted">PCB • NEET Syllabus Only</span></div></div>
     <div class="header-actions">
@@ -1735,6 +1701,7 @@ function layout(content){
       <button class="btn secondary" onclick="go('diagrams')">Diagram Questions</button>
       <button class="btn secondary" onclick="go('pdftests')">PDF Tests</button>
       <button class="btn" onclick="startDaily()">Daily Challenge</button>
+      <button class="btn secondary" onclick="go('friendgame')">🎮 Friend Game</button>
       <button class="btn secondary" onclick="go('account')">👤 Account</button>
       <button class="btn green" id="installAppBtn" data-install-app onclick="installPWA()">📲 Install App</button>
     </div>
@@ -1757,7 +1724,7 @@ function layout(content){
   </nav>`
 }
 function nav(page,label){return `<button class="nav-btn ${state.page===page?'active':''}" onclick="go('${page}')">${label}</button>`}
-function go(page){if(page==='admin'||page==='myadded'){toast('Owner Admin is private.');return}if(state.timer){clearInterval(state.timer);state.timer=null}document.body.style.overflow='';state.page=page;saveSession();render()}
+function go(page){if(page==='admin'||page==='myadded'){toast('Owner Admin is private.');return}if(page!=='friendgame')stopFriendGamePolling();if(state.timer){clearInterval(state.timer);state.timer=null}document.body.style.overflow='';state.page=page;saveSession();render()}
 
 
 function toggleMobileMenu(open){
@@ -1846,53 +1813,90 @@ function buildTestLibrary(){
 const TESTS=buildTestLibrary();
 
 function testCards(list){
-  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No exact duplicate question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
+  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No repeated base question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
 }
 
 
+const AZ11_BOTANY_FULL_CHAPTERS=new Set([
+  'The Living World','Biological Classification','Plant Kingdom','Morphology of Flowering Plants','Anatomy of Flowering Plants',
+  'Cell: The Unit of Life','Biomolecules','Cell Cycle and Cell Division','Photosynthesis in Higher Plants','Respiration in Plants',
+  'Plant Growth and Development','Sexual Reproduction in Flowering Plants','Microbes in Human Welfare',
+  'Biotechnology: Principles and Processes','Biotechnology and its Applications','Organisms and Populations','Ecosystem','Biodiversity and Conservation',
+  'Reproduction','Ecology and Environment','Biotechnology','Biodiversity'
+]);
 function questionSection(q){
   if(q.paperSection)return q.paperSection;
   if(q.subject==='Physics')return 'Physics';
   if(q.subject==='Chemistry')return 'Chemistry';
+  if(q.subject==='Biology'){
+    const ch=String(q.chapter||q.topic||'');
+    if(AZ11_BOTANY_FULL_CHAPTERS.has(ch) || /plant|flower|photosynth|respiration in plant|botany|ecosystem|biodiversity|microbes|biotech/i.test(ch))return 'Botany';
+    return 'Zoology';
+  }
   return null;
 }
 function uniqueByBaseAndText(list){
   const bases=new Set(),texts=new Set(),out=[];
-  for(const q of list.sort(()=>Math.random()-.5)){
+  for(const q of list.slice().sort(()=>Math.random()-.5)){
     const b=String(q.baseId||q.id),t=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
     if(bases.has(b)||texts.has(t))continue;
     bases.add(b);texts.add(t);out.push(clone(q));
   }
   return out;
 }
-function startFullNeet180(){
-  const all=[...AZ11_FULL_BANK,...getRemoteQuestions()].map(normalizeQuestion).filter(Boolean);
-  const sections=['Physics','Chemistry','Botany','Zoology'],picked=[];
-  for(const s of sections){
-    const pool=uniqueByBaseAndText(all.filter(q=>questionSection(q)===s));
-    const part=pool.slice(0,45);
-    if(part.length<45){toast(`${s}: only ${part.length} unique questions available.`);return}
-    picked.push(...part);
-  }
-  const ordered=[];
-  for(const s of sections)ordered.push(...picked.filter(q=>questionSection(q)===s).sort(()=>Math.random()-.5));
-  startExam('AZ11 NEET Full Test • 180 Questions',ordered,180);
+function az11SeededRandom(seed){
+  let a=seed>>>0;
+  return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296}
 }
-
+function az11SeededShuffle(list,seed){
+  const out=list.map(clone),rnd=az11SeededRandom(seed);
+  for(let i=out.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[out[i],out[j]]=[out[j],out[i]]}
+  return out;
+}
+function az11UniqueStable(list){
+  const bases=new Set(),texts=new Set(),out=[];
+  for(const q of list){
+    const b=String(q.baseId||q.id),t=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
+    if(!t||bases.has(b)||texts.has(t))continue;
+    bases.add(b);texts.add(t);out.push(q);
+  }
+  return out;
+}
+function startFullNeet180(testNo=1){
+  testNo=Math.max(1,Math.min(120,Number(testNo)||1));
+  // Do NOT discard the built-in 180-question bank through chapter normalization.
+  // This guarantees every Full Test opens even when the owner has uploaded zero questions.
+  const raw=[...AZ11_FULL_BANK,...QUESTION_BANK.filter(q=>q.type!=='Diagram'),...getRemoteQuestions()];
+  const all=raw.map(q=>normalizeQuestion(q)||q).filter(Boolean);
+  const sections=['Physics','Chemistry','Botany','Zoology'],picked=[];
+  sections.forEach((sec,si)=>{
+    let pool=az11UniqueStable(all.filter(q=>questionSection(q)===sec));
+    // Built-in section questions are always included as a safety fallback.
+    const fallback=AZ11_FULL_BANK.filter(q=>questionSection(q)===sec);
+    pool=az11UniqueStable([...pool,...fallback]);
+    const part=az11SeededShuffle(pool,4571100+testNo*1009+si*7919).slice(0,45);
+    if(part.length<45){toast(`${sec}: question bank needs at least 45 questions.`);return}
+    picked.push(...part);
+  });
+  if(picked.length!==180){toast('Full Test bank is still syncing. Reopen once.');return}
+  const ordered=[];
+  for(const [si,sec] of sections.entries()){
+    const part=picked.filter(q=>questionSection(q)===sec);
+    ordered.push(...az11SeededShuffle(part,880000+testNo*313+si*37));
+  }
+  startExam(`AZ11 NEET Full Mock ${testNo} • 180 Questions`,ordered,180);
+}
 function fullTestsPage(){
-  return layout(`<h1 class="page-title">NEET Full Test</h1>
-    <div class="card full-neet-card">
-      <h2 style="margin-top:0">🏆 AZ11 NEET Full Mock — 180 Questions</h2>
-      <p class="muted">Exact section split requested for AZ11. All questions are single-correct MCQs with +4 / −1 marking.</p>
-      <div class="section-badges">
-        <span class="section-badge">⚡ Physics — 45</span>
-        <span class="section-badge">⚗️ Chemistry — 45</span>
-        <span class="section-badge">🌿 Botany — 45</span>
-        <span class="section-badge">🧬 Zoology — 45</span>
-      </div>
-      <p><b>Total:</b> 180 Questions • 720 Marks • 180 Minutes</p>
-      <button class="btn green" onclick="startFullNeet180()">Start Full NEET Test</button>
-    </div>`)
+  const cards=Array.from({length:120},(_,i)=>{
+    const n=i+1;
+    return `<div class="card test-card"><span class="pill">PCB Full Syllabus</span><span class="pill diff-Hard">720 Marks</span><h3>🏆 AZ11 Full Mock ${n}</h3><div class="small muted">180 Questions • Physics 45 • Chemistry 45 • Botany 45 • Zoology 45 • 180 Minutes • +4/−1</div><br><button class="btn green" onclick="startFullNeet180(${n})">Start Full Test ${n}</button></div>`
+  }).join('');
+  return layout(`<h1 class="page-title">NEET Full / All-Over Tests</h1>
+    <div class="neet-only">✅ <b>120 full-syllabus tests</b> • Every test opens from the built-in AZ11 bank even if no owner questions are uploaded.</div>
+    <div class="section-badges" style="margin:14px 0 18px">
+      <span class="section-badge">⚡ Physics — 45</span><span class="section-badge">⚗️ Chemistry — 45</span><span class="section-badge">🌿 Botany — 45</span><span class="section-badge">🧬 Zoology — 45</span>
+    </div>
+    <div class="test-grid">${cards}</div>`)
 }
 function filterFullTests(){}
 
@@ -1941,26 +1945,7 @@ function pdfAnswerTokens(t){
   const legacy=String(t?.answerKey||'').toUpperCase().replace(/[^ABCD]/g,'');
   return [...legacy];
 }
-
-function az11PdfUrl(id){
-  return `/api/pdf-test-file?id=${encodeURIComponent(id)}&v=${Date.now()}`;
-}
-function az11MobilePdfMode(){
-  return window.matchMedia('(max-width: 900px)').matches ||
-         /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-function openPdfPaper(id){
-  const url=az11PdfUrl(id);
-  const w=window.open(url,'_blank');
-  if(!w){
-    const a=document.createElement('a');
-    a.href=url;a.target='_blank';a.rel='noopener';
-    document.body.appendChild(a);a.click();a.remove();
-  }
-}
-
 function startPdfTest(id){
-  const mobilePaperWindow=az11MobilePdfMode()?window.open('about:blank','_blank'):null;
   const t=getPdfTests().find(x=>String(x.id)===String(id));
   if(!t)return toast('PDF test not found. Sync again.');
   const tokens=pdfAnswerTokens(t);
@@ -1988,15 +1973,6 @@ function startPdfTest(id){
   startExam(t.title||'AZ11 PDF Test',qs,Math.max(1,Number(t.minutes)||count));
   state.exam.pdfTest={id:String(t.id),title:t.title||'PDF Test',fileName:t.fileName||'paper.pdf'};
   saveSession();render();
-
-  if(az11MobilePdfMode()){
-    const url=az11PdfUrl(t.id);
-    if(mobilePaperWindow){
-      try{mobilePaperWindow.location.href=url}catch(e){openPdfPaper(t.id)}
-    }else{
-      setTimeout(()=>toast('Tap “Open PDF Paper” to view the paper.'),100);
-    }
-  }
 }
 
 function pyqPage(){
@@ -2005,7 +1981,6 @@ function pyqPage(){
 }
 
 
-function questionTextKey(q){return String(q?.q||'').replace(/<[^>]*>/g,' ').trim().toLowerCase().replace(/\s+/g,' ')}
 function pickQuestions(filters={},count=20){
   const match=(q,relaxDifficulty=false)=>
     (!filters.subject||q.subject===filters.subject)&&
@@ -2020,30 +1995,22 @@ function pickQuestions(filters={},count=20){
   if(pool.length<count)pool=allQuestions().filter(q=>match(q,true));
   if(filters.chapter && !pool.length){toast('No questions available for this chapter yet.');return []}
 
-  // Pass 1: prefer different base questions/concepts.
-  const shuffled=pool.slice().sort(()=>Math.random()-.5);
-  const usedBase=new Set(),usedText=new Set(),picked=[];
-  for(const q of shuffled){
-    const t=questionTextKey(q),b=String(q.baseId||q.id);
-    if(!t||usedText.has(t)||usedBase.has(b))continue;
-    picked.push(clone(q));usedText.add(t);usedBase.add(b);
+  const groups=new Map(),exact=new Set();
+  for(const q of pool){
+    const textKey=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
+    if(exact.has(textKey))continue;
+    exact.add(textKey);
+    const key=String(q.baseId||q.id);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(q);
+  }
+  const g=[...groups.values()].sort(()=>Math.random()-.5),picked=[];
+  for(const group of g){
+    picked.push(clone(group[Math.floor(Math.random()*group.length)]));
     if(picked.length>=count)break;
   }
-
-  // Pass 2: if a chapter currently has only a few base questions, fill the
-  // requested test using other non-identical variants from the SAME pool.
-  // Exact question text is never repeated and we never borrow another chapter.
-  if(picked.length<count){
-    for(const q of shuffled){
-      const t=questionTextKey(q);
-      if(!t||usedText.has(t))continue;
-      picked.push(clone(q));usedText.add(t);
-      if(picked.length>=count)break;
-    }
-  }
-
-  if(picked.length<count)toast(`${picked.length} non-identical questions are available for this selection.`);
-  return picked.slice(0,count).map((x,i)=>({...x,runId:i+1}));
+  if(picked.length<count)toast(`${picked.length} unique questions available — repeats were not added.`);
+  return picked.map((x,i)=>({...x,runId:i+1}));
 }
 function startNamedTest(id){
   const t=TESTS.find(x=>x.id===id);
@@ -2107,23 +2074,7 @@ function optionChoices(q){if(q.imageOptionsOnly){return [0,1,2,3].map(i=>`<label
 function examPage(){
   const q=state.exam.questions[state.current];
   const pdf=state.exam.pdfTest;
-  const pdfViewer=pdf?(
-    az11MobilePdfMode()
-      ?`<div class="card pdf-test-viewer" style="padding:12px;margin-bottom:14px">
-          <div class="pdf-test-head">
-            <b>📄 ${esc(pdf.title||'PDF Paper')}</b>
-            <div class="small muted" style="margin:7px 0 10px">Mobile वर paper वेगळ्या tab मध्ये उघडतो. AZ11 मध्ये परत येऊन A/B/C/D answer select करा.</div>
-            <button class="btn secondary" style="width:100%" onclick="openPdfPaper('${pdf.id}')">📄 Open PDF Paper</button>
-          </div>
-        </div>`
-      :`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px">
-          <div class="row pdf-test-head" style="justify-content:space-between;align-items:center">
-            <b>📄 ${esc(pdf.title||'PDF Paper')}</b>
-            <button class="btn secondary" onclick="openPdfPaper('${pdf.id}')">Open PDF</button>
-          </div>
-          <iframe src="${az11PdfUrl(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe>
-        </div>`
-  ):'';
+  const pdfViewer=pdf?`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px"><div class="row pdf-test-head" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
   return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
 }
 function exitTest(){
@@ -2144,87 +2095,48 @@ function markReview(){state.review[state.current]=true;if(state.current<state.ex
 function jumpQ(i){state.current=i;saveSession();renderExamOnly()}
 
 function submitExam(auto=false){
-  if(!state.exam||state.submitting)return;
   if(!auto&&!confirm('Submit the test now?'))return;
-  state.submitting=true;
-  try{
-    if(state.timer){clearInterval(state.timer);state.timer=null}
-    syncExamClock();
-    const exam=state.exam;
-    const qs=exam.questions||[];
-    let correct=0,wrong=0,unattempted=0;
-    const details=qs.map((q,i)=>{
-      const ans=state.answers[i];
-      let status='unattempted';
-      if(q.dropped){correct++;status='correct'}
-      else if(ans===null||ans===undefined)unattempted++;
-      else if(Array.isArray(q.validAnswers)&&q.validAnswers.length?q.validAnswers.includes(ans):ans===q.a){correct++;status='correct'}
-      else{wrong++;status='wrong'}
-      return{q,ans:ans===undefined?null:ans,status}
-    });
-    const score=correct*4-wrong;
-    const used=Math.max(0,exam.minutes*60-state.seconds);
-    const accuracy=qs.length?Math.round(correct/qs.length*100):0;
-    const timeBonus=Math.max(0,Math.min(80,Math.floor(state.seconds/15)));
-    const points=Math.max(0,correct*20-wrong*5+(accuracy>=90?120:accuracy>=80?70:accuracy>=70?35:0)+timeBonus);
-    const result={id:Date.now(),name:exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,details};
-
-    // Local-first result: the result screen does NOT depend on the server.
-    state.lastResult=result;
-    saveLastResult(result);
-    const arr=getResults();arr.push(result);
-    const stored=saveResults(arr);
-
-    // Server/account syncing is background-only and cannot block the result.
-    try{syncAttemptToAccount(result)}catch(e){}
-
-    clearSavedExam();
-    state.page='result';
-    saveSession();
-    try{
-      render();
-    }catch(renderError){
-      console.error('AZ11 result render failed',renderError);
-      const app=document.getElementById('app');
-      if(app)app.innerHTML=layout(`<h1 class="page-title">Test Result</h1><div class="card"><div class="result-score">${result.score}/${result.total*4}</div><p><b>Correct:</b> ${result.correct} &nbsp; <b>Wrong:</b> ${result.wrong} &nbsp; <b>Unattempted:</b> ${result.unattempted}</p><p><b>Accuracy:</b> ${result.accuracy}%</p><button class="btn" onclick="go('dashboard')">Back to Dashboard</button></div>`);
-    }
-    window.scrollTo({top:0,left:0,behavior:'auto'});
-    setTimeout(()=>toast(stored?'Result saved ✅':'Result ready ✅ (history storage was full)'),60);
-  }catch(e){
-    console.error('AZ11 submit failed',e);
-    // Even if saving fails, show the already calculated result when possible.
-    if(state.lastResult){
-      clearSavedExam();state.page='result';saveSession();
-      try{render()}catch(_){}
-    }else{
-      state.page=state.exam?'exam':'dashboard';saveSession();try{render()}catch(_){}
-    }
-    setTimeout(()=>toast('Your test was submitted locally.'),60);
-  }finally{
-    state.submitting=false;
-  }
+  if(state.timer){clearInterval(state.timer);state.timer=null}
+  syncExamClock();
+  const qs=state.exam.questions;
+  let correct=0,wrong=0,unattempted=0;
+  const details=qs.map((q,i)=>{
+    const ans=state.answers[i];
+    let status='unattempted';
+    if(q.dropped){correct++;status='correct'}
+    else if(ans===null)unattempted++;
+    else if(Array.isArray(q.validAnswers)&&q.validAnswers.length?q.validAnswers.includes(ans):ans===q.a){correct++;status='correct'}
+    else{wrong++;status='wrong'}
+    return{q,ans,status}
+  });
+  const score=correct*4-wrong;
+  const used=Math.max(0,state.exam.minutes*60-state.seconds);
+  const accuracy=Math.round(correct/qs.length*100);
+  const timeBonus=Math.max(0,Math.min(80,Math.floor(state.seconds/15)));
+  const points=Math.max(0,correct*20-wrong*5+(accuracy>=90?120:accuracy>=80?70:accuracy>=70?35:0)+timeBonus);
+  const result={id:Date.now(),name:state.exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,details};
+  const arr=getResults();arr.push(result);saveResults(arr);
+  state.lastResult=result;
+  syncAttemptToAccount(result);
+  clearSavedExam();
+  state.page='result';
+  saveSession();
+  render();
 }
 function performanceLabel(a){if(a>=90)return '🔥 Rank Booster! Excellent NEET control.';if(a>=80)return '⚡ Strong! Keep the streak alive.';if(a>=70)return '💪 Good fight. Fix the weak concepts.';if(a>=60)return '🎯 Improvement zone. Review explanations and retry.';return '🚀 Comeback mode. Revise concepts, then attack again.'}
 function resultPage(){const r=state.lastResult;if(!r)return layout('<div class="empty">No result available.</div>');return layout(`<h1 class="page-title">Test Result</h1><div class="grid stats"><div class="card"><div class="muted">Score</div><div class="result-score">${r.score}/${r.total*4}</div></div><div class="card"><div class="muted">Correct</div><div class="metric">${r.correct}</div></div><div class="card"><div class="muted">Wrong</div><div class="metric" style="color:var(--red)">${r.wrong}</div></div><div class="card"><div class="muted">Accuracy</div><div class="metric">${r.accuracy}%</div></div></div><div class="card xp-card" style="margin-top:16px"><div class="points-pop" style="color:white">+${r.points} XP</div><div class="josh">${performanceLabel(r.accuracy)}</div><div>Time: ${formatTime(r.used)} • Unattempted: ${r.unattempted}</div></div><h2>Question-by-Question Explanation</h2>${r.details.map((d,i)=>reviewHTML(d,i)).join('')}`)}
-function answerText(q,i){
-  if(i===null||i===undefined)return 'Not Attempted';
-  const letter=String.fromCharCode(65+Number(i));
-  if(q?.imageOptionsOnly)return letter;
-  const op=Array.isArray(q?.o)?q.o[Number(i)]:'';
-  return op!==undefined&&op!==''?`${letter}. ${op}`:letter;
-}
 function correctAnswerText(q){if(q.dropped)return 'DROP (+4 awarded)';if(Array.isArray(q.validAnswers)&&q.validAnswers.length>1)return q.validAnswers.map(i=>answerText(q,i)).join(' / ');return answerText(q,q.a)}
 function reviewHTML(d,i){const q=d.q,b=getBookmarks(),marked=b.includes(q.id);return `<div class="review-card"><button class="bookmark-btn" onclick="toggleBookmark(${q.id})">${marked?'★':'☆'}</button><div class="q-number">Q${i+1} • ${q.subject} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}<div class="${d.status==='correct'?'correct':d.status==='wrong'?'wrong':'muted'}">Status: ${d.status.toUpperCase()}</div><p><b>Your Answer:</b> ${q.dropped?'Not required':(d.ans===null?'Not Attempted':answerText(q,d.ans))}</p><p><b>Correct Answer:</b> <span class="correct">${correctAnswerText(q)}</span></p><div class="explanation"><b>Detailed Explanation:</b><br>${q.e}</div><p><b>Concept:</b> ${q.concept}</p><p class="small muted"><b>Source style:</b> ${q.source||'Original Practice'}</p></div>`}
 function toggleBookmark(id){let b=getBookmarks();if(b.includes(id)){b=b.filter(x=>x!==id);toast('Bookmark removed')}else{b.push(id);toast('Question bookmarked')}saveBookmarks(b);render()}
 
 function historyTable(r){if(!r.length)return '<div class="empty">No tests attempted yet.</div>';return `<div class="table-wrap"><table><tr><th>Test</th><th>Date</th><th>Score</th><th>Accuracy</th><th>XP</th></tr>${r.map(x=>`<tr><td>${x.name}</td><td>${x.date}</td><td>${x.score}/${x.total*4}</td><td>${x.accuracy}%</td><td>+${pointsForResult(x)}</td></tr>`).join('')}</table></div>`}
 function historyPage(){return layout(`<h1 class="page-title">Test History</h1><div class="card">${historyTable(getResults().slice().reverse())}</div>`)}
-function wrongPage(){const wrong=[];getResults().forEach(r=>(r.details||[]).forEach(d=>{if(d.status==='wrong')wrong.push(d)}));return layout(`<h1 class="page-title">Wrong Question Book</h1>${wrong.length?wrong.slice().reverse().map((d,i)=>reviewHTML(d,i)).join(''):'<div class="card empty">No wrong questions yet.</div>'}`)}
+function wrongPage(){const wrong=[];getResults().forEach(r=>r.details.forEach(d=>{if(d.status==='wrong')wrong.push(d)}));return layout(`<h1 class="page-title">Wrong Question Book</h1>${wrong.length?wrong.slice().reverse().map((d,i)=>reviewHTML(d,i)).join(''):'<div class="card empty">No wrong questions yet.</div>'}`)}
 function bookmarksPage(){const ids=getBookmarks(),qs=allQuestions().filter(q=>ids.includes(q.id));return layout(`<h1 class="page-title">Bookmarked Questions</h1>${qs.length?qs.map((q,i)=>reviewHTML({q,ans:null,status:'unattempted'},i)).join(''):'<div class="card empty">No bookmarks yet.</div>'}`)}
 function myAddedPage(){const qs=getCustom();return layout(`<h1 class="page-title">My Added Questions</h1><div class="card" style="margin-bottom:16px"><b>${qs.length} questions added by you.</b><br><span class="small muted">For image/diagram questions, the options stay inside your uploaded image. Students only see clickable A / B / C / D choices.</span></div>${qs.length?qs.slice().reverse().map((q,i)=>`<div class="review-card"><div class="q-number">${q.subject} • Class ${q.class} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}${q.imageOptionsOnly?'<p><b>Student choices:</b> A &nbsp; B &nbsp; C &nbsp; D</p>':`<p><b>A.</b> ${q.o[0]}</p><p><b>B.</b> ${q.o[1]}</p><p><b>C.</b> ${q.o[2]}</p><p><b>D.</b> ${q.o[3]}</p>`}<p><b>Correct:</b> <span class="correct">${answerText(q,q.a)}</span></p><div class="explanation"><b>Explanation:</b><br>${q.e}</div><br><button class="btn red" onclick="deleteAdminQuestion(${q.id})">Delete Question</button></div>`).join(''):'<div class="card empty">You have not added any questions yet. Open Admin → Add Question.</div>'}`)}
 function deleteAdminQuestion(id){if(!confirm('Delete this added question?'))return;saveCustom(getCustom().filter(q=>q.id!==id));toast('Question deleted');render()}
 
-function performancePage(){const r=getResults();const subjectStats=['Biology','Chemistry','Physics'].map(s=>{let c=0,t=0;r.forEach(x=>(x.details||[]).forEach(d=>{if(d.q.subject===s){t++;if(d.status==='correct')c++}}));return [s,t?Math.round(c/t*100):0]});return layout(`<h1 class="page-title">Performance</h1><div class="grid" style="grid-template-columns:2fr 1fr"><div class="card"><h2>Score Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card"><h2>Subject Accuracy</h2>${subjectStats.map(([s,a])=>`<p><b>${s}</b> — ${a}%</p><div style="height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="width:${a}%;height:100%;background:#0b3b82"></div></div>`).join('')}</div></div><div class="card" style="margin-top:16px">${historyTable(r.slice().reverse())}</div>`)}
+function performancePage(){const r=getResults();const subjectStats=['Biology','Chemistry','Physics'].map(s=>{let c=0,t=0;r.forEach(x=>x.details?.forEach(d=>{if(d.q.subject===s){t++;if(d.status==='correct')c++}}));return [s,t?Math.round(c/t*100):0]});return layout(`<h1 class="page-title">Performance</h1><div class="grid" style="grid-template-columns:2fr 1fr"><div class="card"><h2>Score Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card"><h2>Subject Accuracy</h2>${subjectStats.map(([s,a])=>`<p><b>${s}</b> — ${a}%</p><div style="height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden"><div style="width:${a}%;height:100%;background:#0b3b82"></div></div>`).join('')}</div></div><div class="card" style="margin-top:16px">${historyTable(r.slice().reverse())}</div>`)}
 function drawPerformanceGraph(){const c=document.getElementById('perfChart');if(!c)return;const ctx=c.getContext('2d'),r=getResults().slice(-12);ctx.clearRect(0,0,c.width,c.height);ctx.strokeStyle='#cbd5e1';ctx.lineWidth=1;for(let y=20;y<c.height-25;y+=50){ctx.beginPath();ctx.moveTo(45,y);ctx.lineTo(c.width-20,y);ctx.stroke()}ctx.fillStyle='#64748b';ctx.font='12px Arial';ctx.fillText('100%',5,24);ctx.fillText('0%',18,c.height-25);if(!r.length){ctx.fillStyle='#64748b';ctx.font='16px Arial';ctx.fillText('Attempt tests to see your performance graph.',70,135);return}const left=50,right=c.width-25,top=20,bottom=c.height-30,step=r.length>1?(right-left)/(r.length-1):0;ctx.strokeStyle='#0b3b82';ctx.lineWidth=4;ctx.beginPath();r.forEach((x,i)=>{const px=left+i*step,py=bottom-(x.accuracy/100)*(bottom-top);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)});ctx.stroke();r.forEach((x,i)=>{const px=left+i*step,py=bottom-(x.accuracy/100)*(bottom-top);ctx.fillStyle='#0b3b82';ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#334155';ctx.fillText(x.accuracy+'%',Math.max(5,px-15),Math.max(14,py-10))})}
 
 
@@ -2710,6 +2622,338 @@ function downloadOfflineApp(){
 
 
 
+let friendGameRoom=null;
+let friendGamePoll=null;
+let friendGameLastReactionId='';
+let FRIEND_GAME_BANK_CACHE=null;
+
+const FRIEND_GAME_CODE_KEY='az11_friend_game_code_v1';
+const FRIEND_GAME_EMOJIS=['😂','🔥','😎','😜','👀','💪'];
+
+function stopFriendGamePolling(){
+  if(friendGamePoll){clearInterval(friendGamePoll);friendGamePoll=null}
+}
+
+function friendGameBank(){
+  if(FRIEND_GAME_BANK_CACHE)return FRIEND_GAME_BANK_CACHE;
+
+  // Stable built-in AZ11 bank only, so both phones always have the exact same question data.
+  // QUESTION_BANK currently provides 2604 generated practice questions; AZ11_FULL_BANK adds 180.
+  const raw=[...QUESTION_BANK.filter(q=>q.type!=='Diagram'),...AZ11_FULL_BANK];
+  const seen=new Set(),out=[];
+
+  for(const src of raw){
+    const q=normalizeQuestion(src)||src;
+    if(!q||!Array.isArray(q.o)||q.o.length!==4||!Number.isInteger(Number(q.a)))continue;
+    const id=String(q.id);
+    if(seen.has(id))continue;
+    seen.add(id);
+    out.push(q);
+  }
+
+  FRIEND_GAME_BANK_CACHE=out;
+  return out;
+}
+
+function friendGameQuestionById(id){
+  return friendGameBank().find(q=>String(q.id)===String(id))||null;
+}
+
+function randomGameSeed(){
+  try{
+    if(crypto?.getRandomValues){
+      const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]>>>0;
+    }
+  }catch(e){}
+  return (Date.now()^(Math.random()*0xffffffff))>>>0;
+}
+
+function makeFriendGameSet(){
+  const bank=friendGameBank();
+  const seed=randomGameSeed();
+  const sections=['Physics','Chemistry','Botany','Zoology'];
+  const picked=[];
+  const usedBase=new Set();
+
+  // Keep the game balanced: 5 Physics + 5 Chemistry + 5 Botany + 5 Zoology.
+  for(const [si,sec] of sections.entries()){
+    const pool=az11SeededShuffle(bank.filter(q=>questionSection(q)===sec),seed+si*7919);
+    let n=0;
+    for(const q of pool){
+      const base=String(q.baseId||q.id);
+      if(usedBase.has(base))continue;
+      usedBase.add(base);
+      picked.push(q);
+      n++;
+      if(n===5)break;
+    }
+  }
+
+  // Safety fallback if any section is temporarily short.
+  if(picked.length<20){
+    const rest=az11SeededShuffle(bank,seed+99173);
+    for(const q of rest){
+      const base=String(q.baseId||q.id);
+      if(usedBase.has(base))continue;
+      usedBase.add(base);
+      picked.push(q);
+      if(picked.length===20)break;
+    }
+  }
+
+  return az11SeededShuffle(picked.slice(0,20),seed+777);
+}
+
+async function friendGameApi(body=null,code=''){
+  const url='/api/game'+(code?`?code=${encodeURIComponent(code)}`:'');
+  const opt=body
+    ?{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)}
+    :{cache:'no-store',credentials:'same-origin'};
+  const r=await fetch(url,opt),d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||`Game HTTP ${r.status}`);
+  return d;
+}
+
+function absorbFriendReaction(room,showToast=true){
+  if(!room||!accountState.user)return;
+  const mine=(room.reactions||[]).filter(x=>x.to===accountState.user.username);
+  const last=mine[mine.length-1];
+  if(!last||last.id===friendGameLastReactionId)return;
+  friendGameLastReactionId=last.id;
+  if(showToast && Date.now()-Number(last.at||0)<20000){
+    toast(`${last.emoji} ${last.fromDisplayName||last.from} sent you ${last.emoji}`);
+  }
+}
+
+async function createFriendGame(){
+  if(!accountState.user){toast('Login to Account first.');go('account');return}
+  const qs=makeFriendGameSet();
+  if(qs.length!==20){toast('Game question bank is still loading. Reopen once.');return}
+
+  try{
+    const d=await friendGameApi({
+      action:'create',
+      questionIds:qs.map(q=>String(q.id)),
+      correctAnswers:qs.map(q=>Number(q.a))
+    });
+    friendGameRoom=d.room;
+    friendGameLastReactionId='';
+    localStorage.setItem(FRIEND_GAME_CODE_KEY,d.room.code);
+    render();
+    startFriendGamePolling();
+  }catch(e){toast(e.message)}
+}
+
+async function joinFriendGame(){
+  if(!accountState.user){toast('Login to Account first.');go('account');return}
+  const code=(document.getElementById('friendCode')?.value||'').trim().toUpperCase();
+  if(!code)return toast('Enter game code.');
+
+  try{
+    const d=await friendGameApi({action:'join',code});
+    friendGameRoom=d.room;
+    friendGameLastReactionId='';
+    localStorage.setItem(FRIEND_GAME_CODE_KEY,code);
+    absorbFriendReaction(d.room,false);
+    render();
+    startFriendGamePolling();
+  }catch(e){toast(e.message)}
+}
+
+async function refreshFriendGame(silent=true){
+  const code=friendGameRoom?.code||localStorage.getItem(FRIEND_GAME_CODE_KEY)||'';
+  if(!code)return false;
+
+  try{
+    const d=await friendGameApi(null,code);
+    absorbFriendReaction(d.room,true);
+    friendGameRoom=d.room;
+    if(state.page==='friendgame')render();
+    return true;
+  }catch(e){
+    friendGameRoom=null;
+    friendGameLastReactionId='';
+    localStorage.removeItem(FRIEND_GAME_CODE_KEY);
+    if(!silent)toast(e.message);
+    if(state.page==='friendgame')render();
+    return false;
+  }
+}
+
+function startFriendGamePolling(){
+  if(friendGamePoll||state.page!=='friendgame'||!friendGameRoom?.code)return;
+  friendGamePoll=setInterval(()=>{
+    if(state.page==='friendgame')refreshFriendGame(true);
+    else stopFriendGamePolling()
+  },2500);
+}
+
+async function leaveFriendGame(){
+  const code=friendGameRoom?.code||localStorage.getItem(FRIEND_GAME_CODE_KEY)||'';
+  try{if(code)await friendGameApi({action:'leave',code})}catch(e){}
+  stopFriendGamePolling();
+  friendGameRoom=null;
+  friendGameLastReactionId='';
+  localStorage.removeItem(FRIEND_GAME_CODE_KEY);
+  render();
+}
+
+async function answerFriendGame(index,choice){
+  if(!friendGameRoom?.code)return;
+  try{
+    const d=await friendGameApi({action:'answer',code:friendGameRoom.code,index,choice});
+    friendGameRoom=d.room;
+    absorbFriendReaction(d.room,true);
+    toast(d.point===1?'✅ Correct • +1 point':'❌ Wrong • 0 point');
+    render();
+    startFriendGamePolling();
+  }catch(e){toast(e.message)}
+}
+
+async function sendFriendEmoji(emoji){
+  if(!friendGameRoom?.code||!FRIEND_GAME_EMOJIS.includes(emoji))return;
+  try{
+    const d=await friendGameApi({action:'react',code:friendGameRoom.code,emoji});
+    friendGameRoom=d.room;
+    toast(`${emoji} sent!`);
+    render();
+    startFriendGamePolling();
+  }catch(e){toast(e.message)}
+}
+
+async function copyFriendGameCode(){
+  const code=friendGameRoom?.code||'';
+  if(!code)return;
+  try{
+    await navigator.clipboard.writeText(code);
+    toast('Game code copied ✅');
+  }catch(e){
+    try{
+      const t=document.createElement('textarea');t.value=code;document.body.appendChild(t);
+      t.select();document.execCommand('copy');t.remove();toast('Game code copied ✅');
+    }catch(_){toast(`Game code: ${code}`)}
+  }
+}
+
+function friendReactionBar(room){
+  if((room.players||[]).length<2)return '';
+  const latest=(room.reactions||[]).filter(x=>x.to===accountState.user?.username).slice(-1)[0];
+  return `<div class="card" style="margin-top:14px">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+      <div><b>😜 Emoji Tease</b><div class="small muted">Send a quick reaction to your friend. It does not affect score.</div></div>
+      ${latest?`<div class="pill">${latest.emoji} from ${esc(latest.fromDisplayName||latest.from)}</div>`:''}
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${FRIEND_GAME_EMOJIS.map(e=>`<button class="btn secondary" style="font-size:22px;padding:8px 13px" onclick="sendFriendEmoji('${e}')">${e}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function friendGamePage(){
+  if(!accountState.user){
+    return layout(`<h1 class="page-title">🎮 Friend Game</h1>
+      <div class="card">
+        <h2>Login required</h2>
+        <p class="muted">You and your friend use your own AZ11 accounts. Both receive the exact same random questions, same order and same options.</p>
+        <button class="btn" onclick="go('account')">Open Account / Login</button>
+      </div>`)
+  }
+
+  if(!friendGameRoom){
+    const saved=localStorage.getItem(FRIEND_GAME_CODE_KEY)||'';
+    if(saved)setTimeout(()=>refreshFriendGame(true),0);
+
+    return layout(`<h1 class="page-title">🎮 Friend Game</h1>
+      <div class="neet-only">🎲 <b>${friendGameBank().length} built-in game questions</b> • Every new room gets a fresh random set • Same 20 questions for both players • No repeated base question in one game.</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:14px">
+        <div class="card">
+          <h2>Create Game</h2>
+          <p><b>20 random NEET questions</b> from the 1000+ AZ11 bank.</p>
+          <p>Balanced set: 5 Physics • 5 Chemistry • 5 Botany • 5 Zoology.</p>
+          <p><b>Scoring:</b> Correct = 1 point • Wrong = 0 point.</p>
+          <p class="small muted">Create a new room anytime to get a completely fresh random set.</p>
+          <button class="btn green" onclick="createFriendGame()">🎮 Create Friend Game</button>
+        </div>
+        <div class="card">
+          <h2>Join Friend</h2>
+          <label>Game Code<input id="friendCode" maxlength="6" placeholder="ABC123" style="text-transform:uppercase"></label><br>
+          <button class="btn" onclick="joinFriendGame()">Join Game</button>
+        </div>
+      </div>`)
+  }
+
+  const r=friendGameRoom,me=r.me||{},players=r.players||[],my=me.answers||{};
+  const next=Array.from({length:r.questionIds.length},(_,i)=>i).find(i=>my[String(i)]==null);
+  const finished=next==null;
+  const bothReady=players.length>=2;
+  const allFinished=bothReady&&players.every(p=>p.answered>=r.questionIds.length);
+
+  let body=`<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+      <div>
+        <h2 style="margin:0">Room ${esc(r.code)}</h2>
+        <span class="small muted">Fresh random 20 • Same questions and order for both players</span>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn secondary" onclick="copyFriendGameCode()">📋 Copy Code</button>
+        <button class="btn red" onclick="leaveFriendGame()">Leave</button>
+      </div>
+    </div>
+  </div>`;
+
+  body+=`<div class="grid stats" style="margin-top:14px">
+    ${players.map(p=>`<div class="card">
+      <div class="muted">${esc(p.displayName||p.username)}</div>
+      <div class="metric">${p.score}</div>
+      <div class="small">points • ${p.answered}/${r.questionIds.length} answered</div>
+    </div>`).join('')}
+  </div>`;
+
+  if(!bothReady){
+    body+=`<div class="card" style="margin-top:14px">
+      <h2>⏳ Waiting for friend…</h2>
+      <p>Tell your friend to open <b>Friend Game</b> and enter code <b>${esc(r.code)}</b>.</p>
+      <div class="row"><button class="btn secondary" onclick="copyFriendGameCode()">📋 Copy Code</button><button class="btn secondary" onclick="refreshFriendGame(false)">Refresh</button></div>
+    </div>`;
+    return layout(`<h1 class="page-title">🎮 Friend Game</h1>${body}`)
+  }
+
+  body+=friendReactionBar(r);
+
+  if(finished){
+    let msg='You finished all questions. Waiting for your friend.';
+    if(allFinished){
+      const max=Math.max(...players.map(p=>p.score)),wins=players.filter(p=>p.score===max);
+      msg=wins.length>1?'🤝 Draw!':`🏆 Winner: ${esc(wins[0].displayName||wins[0].username)}`
+    }
+    body+=`<div class="card" style="margin-top:14px">
+      <h2>Game Complete</h2>
+      <p>${msg}</p>
+      <p><b>Your score:</b> ${me.score}/${r.questionIds.length}</p>
+      ${allFinished?'<button class="btn green" onclick="leaveFriendGame()">🎲 New Random Game</button>':''}
+    </div>`;
+    return layout(`<h1 class="page-title">🎮 Friend Game</h1>${body}`)
+  }
+
+  const q=friendGameQuestionById(r.questionIds[next]);
+  if(!q){
+    body+=`<div class="card">Question data unavailable. Close and reopen AZ11 once so the latest game bank loads.</div>`;
+    return layout(`<h1 class="page-title">🎮 Friend Game</h1>${body}`)
+  }
+
+  body+=`<div class="question-card" style="margin-top:14px">
+    <div class="q-number">Question ${next+1} of ${r.questionIds.length} • ${esc(questionSection(q)||q.subject)}</div>
+    <div class="q-text">${q.q}</div>
+    ${qVisual(q)}
+    <div class="options">
+      ${q.o.map((o,i)=>`<button class="option" onclick="answerFriendGame(${next},${i})"><b>${'ABCD'[i]}.</b> ${esc(o)}</button>`).join('')}
+    </div>
+    <p class="small muted">🎮 Game scoring: right = 1 point • wrong = 0 point. After you answer, your next random-room question opens automatically.</p>
+  </div>`;
+
+  return layout(`<h1 class="page-title">🎮 Friend Game</h1>${body}`)
+}
+
 function accountPage(){
   if(accountState.user){
     const a=accountState.attempts.slice().reverse().slice(0,20);
@@ -2798,7 +3042,6 @@ async function syncAZ11Content(){
   if(accountState.user)syncPendingAttempts();
 }
 window.addEventListener('online',()=>syncAZ11Content());
-window.addEventListener('offline',()=>{try{toast('Offline mode: AZ11 core app and saved tests still work. New sync waits for internet.')}catch(e){}});
 setInterval(()=>{if(document.visibilityState==='visible')syncAZ11Content()},300000);
 
 function render(){
@@ -2811,6 +3054,7 @@ function render(){
   else if(state.page==='pdftests')html=pdfTestsPage();
   else if(state.page==='pyq')html=pyqPage();
   else if(state.page==='custom')html=customPage();
+  else if(state.page==='friendgame')html=friendGamePage();
   else if(state.page==='performance')html=performancePage();
   else if(state.page==='history')html=historyPage();
   else if(state.page==='wrong')html=wrongPage();
@@ -2824,6 +3068,7 @@ function render(){
   setTimeout(renderVisibleQuestionFiles,0);
   setTimeout(refreshInstallButton,0);
   if(state.page==='dashboard'||state.page==='performance')setTimeout(drawPerformanceGraph,0);
+  if(state.page==='friendgame')setTimeout(startFriendGamePolling,0);else stopFriendGamePolling();
   if(state.page==='admin')setTimeout(toggleAdminOptions,0);
   if(state.page==='notes')setTimeout(renderSyncedNoteAttachments,0);
 }
