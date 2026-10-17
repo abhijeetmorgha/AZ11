@@ -62,6 +62,7 @@ input,select,textarea{max-width:100%;min-width:0}
   <button class="btn tab secondary" data-tab="notes" onclick="tab('notes',this)">Notes</button>
   <button class="btn tab secondary" data-tab="pdftests" onclick="tab('pdftests',this)">PDF Tests</button>
   <button class="btn tab secondary" data-tab="users" onclick="tab('users',this)">Users & Progress</button>
+  <button class="btn tab secondary" data-tab="reports" onclick="tab('reports',this)">Question Reports</button>
 </div>
 
 <section id="questions" class="panel active">
@@ -152,6 +153,18 @@ input,select,textarea{max-width:100%;min-width:0}
   <div id="uCount" style="margin:12px 0;font-weight:900"></div><div id="uList"></div>
 </div>
 </section>
+
+<section id="reports" class="panel">
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div><h2 style="margin:0">Question Reports</h2><div class="small muted">Reports sent by logged-in AZ11 students.</div></div>
+    <button class="btn secondary" onclick="loadReports()">Refresh</button>
+  </div>
+  <div id="rCount" style="margin:12px 0;font-weight:900"></div>
+  <div id="rList"></div>
+</div>
+</section>
+
 </main>
 
 <script>
@@ -202,13 +215,13 @@ if('serviceWorker' in navigator){
     updateAdminInstallButton();
   });
 }
-let qItems=[],nItems=[],pItems=[],qEditing=null,nEditing=null,pEditing=null,qPreparedFile=null,nPreparedFile=null,pPreparedFile=null;
+let qItems=[],nItems=[],pItems=[],rItems=[],qEditing=null,nEditing=null,pEditing=null,qPreparedFile=null,nPreparedFile=null,pPreparedFile=null;
 const $=id=>document.getElementById(id);
 function adminKey(){return sessionStorage.getItem('az11AdminKey')||''}
 function msg(t){$('status').textContent=t}
 function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
-function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===b);x.classList.toggle('secondary',x!==b)});if(id==='users')loadUsers();if(id==='pdftests')loadPdfTests()}
-async function connectAdmin(){const k=$('adminKeyInput').value.trim();if(!k)return msg('Enter AZ11_ADMIN_KEY.');sessionStorage.setItem('az11AdminKey',k);await Promise.all([loadQuestions(),loadNotes(),loadPdfTests(),loadUsers()]);msg('Owner Admin connected.')}
+function tab(id,b){document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('.tab').forEach(x=>{x.classList.toggle('active',x===b);x.classList.toggle('secondary',x!==b)});if(id==='users')loadUsers();if(id==='pdftests')loadPdfTests();if(id==='reports')loadReports()}
+async function connectAdmin(){const k=$('adminKeyInput').value.trim();if(!k)return msg('Enter AZ11_ADMIN_KEY.');sessionStorage.setItem('az11AdminKey',k);await Promise.all([loadQuestions(),loadNotes(),loadPdfTests(),loadUsers(),loadReports()]);msg('Owner Admin connected.')}
 function syncSubject(){}
 function toggleQuestionMode(){const fileMode=['Diagram','File Question'].includes($('qType').value);$('qOptions').classList.toggle('hide',fileMode);$('qFileWrap').classList.toggle('hide',!fileMode)}
 async function compressImage(file,max=1200,quality=.8){return new Promise((res,rej)=>{const rd=new FileReader();rd.onerror=()=>rej(rd.error);rd.onload=e=>{const im=new Image();im.onerror=()=>rej(new Error('Invalid image'));im.onload=()=>{const s=Math.min(1,max/im.width,max/im.height),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>b?res(new File([b],file.name.replace(/\.[^.]+$/,'.jpg'),{type:'image/jpeg'})):rej(new Error('compress')),'image/jpeg',quality)};im.src=e.target.result};rd.readAsDataURL(file)})}
@@ -216,6 +229,35 @@ async function prepareQuestionFile(f){qPreparedFile=null;$('qPreview').innerHTML
 async function prepareNoteFile(f){nPreparedFile=null;if(!f){$('nFileInfo').textContent='';return}try{let x=f;if(f.type.startsWith('image/'))x=await compressImage(f,1400,.8);if(x.size>3*1024*1024)return $('nFileInfo').textContent='Max 3 MB after compression.';nPreparedFile=x;$('nFileInfo').textContent=`Ready: ${x.name} • ${(x.size/1024/1024).toFixed(2)} MB`}catch(e){$('nFileInfo').textContent='Could not prepare file.'}}
 function file64(f){return new Promise((res,rej)=>{if(!f)return res(null);const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)})}
 async function api(path,opts={}){opts.headers={...(opts.headers||{}),'x-az11-admin-key':adminKey()};const r=await fetch(path,opts);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+
+
+async function loadReports(){
+  if(!adminKey())return;
+  try{
+    const d=await api('/api/reports?ts='+Date.now(),{cache:'no-store'});
+    rItems=Array.isArray(d)?d:(d.reports||[]);
+    renderReports();
+  }catch(e){msg('Reports: '+e.message)}
+}
+function renderReports(){
+  if(!$('rCount')||!$('rList'))return;
+  $('rCount').textContent=`${rItems.length} report${rItems.length===1?'':'s'}`;
+  $('rList').innerHTML=rItems.length?rItems.slice().reverse().map(x=>`<div class="item">
+    <b>${esc(x.subject||'Question')} • ${esc(x.chapter||'')}</b>
+    <div class="small muted">${esc(x.displayName||x.username||'User')} • ${esc(x.createdAt||'')}</div>
+    <p><b>Reason:</b> ${esc(x.reason||'')}</p>
+    <p>${esc(x.questionText||'')}</p>
+    <div class="small muted">Question ID: ${esc(x.questionId||'')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn red" onclick="deleteReport('${esc(x.id)}')">Resolve / Delete</button></div>
+  </div>`).join(''):'<p class="muted">No question reports.</p>';
+}
+async function deleteReport(id){
+  if(!confirm('Resolve and remove this report?'))return;
+  try{
+    await api('/api/reports',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
+    await loadReports();msg('Report resolved.');
+  }catch(e){msg(e.message)}
+}
 
 async function loadQuestions(){try{const r=await fetch('/api/questions?ts='+Date.now(),{cache:'no-store'});const d=await r.json();qItems=Array.isArray(d)?d:(d.questions||[]);renderQuestions()}catch(e){msg('Questions API not available.')}}
 async function saveQuestion(){if(!adminKey())return msg('Connect Owner Admin first.');const type=$('qType').value,fileMode=['Diagram','File Question'].includes(type),question=$('qText').value.trim();if(!question)return msg('Enter question/instruction.');if(fileMode&&!qPreparedFile&&!qEditing?.hasFile)return msg('Upload the question image/PDF.');const opts=fileMode?['A','B','C','D']:[$('qA').value.trim(),$('qB').value.trim(),$('qC').value.trim(),$('qD').value.trim()];if(!fileMode&&opts.some(x=>!x))return msg('Fill A/B/C/D.');try{const section=$('qSection').value,id=qEditing?.id||String(Date.now()),fileBase64=qPreparedFile?await file64(qPreparedFile):null;const body={action:'upsert',question:{id,baseId:id,paperSection:section,subject:['Botany','Zoology'].includes(section)?'Biology':section,class:$('qClass').value,chapter:$('qChapter').value.trim()||'Custom Chapter',topic:$('qTopic').value.trim()||'Custom Topic',sub:'Owner Published',difficulty:$('qDiff').value,type,source:'Owner Published',q:question,o:opts,a:+$('qAnswer').value,e:$('qExplanation').value.trim()||'Explanation not added.',concept:$('qConcept').value.trim()||'Owner question',imageOptionsOnly:fileMode,hasFile:fileMode&&(!!qPreparedFile||!!qEditing?.hasFile),keepExistingFile:!!qEditing?.hasFile&&!qPreparedFile,fileName:qPreparedFile?.name||qEditing?.fileName||'',fileType:qPreparedFile?.type||qEditing?.fileType||'',fileBase64}};await api('/api/questions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});clearQuestionForm();await loadQuestions();msg('Question published. Everyone will receive it on sync.')}catch(e){msg('Question save failed: '+e.message)}}

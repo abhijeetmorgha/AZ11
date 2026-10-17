@@ -45,6 +45,7 @@ function roomView(room,user){
     code:room.code,
     questionIds:room.questionIds,
     createdAt:room.createdAt,
+    label:room.label||'Friend Game',
     players:room.players.map(p=>({
       username:p.username,
       displayName:p.displayName,
@@ -85,11 +86,42 @@ function newCode(){
   return randomBytes(4).toString("hex").slice(0,6).toUpperCase();
 }
 
+
+async function finalizeGameStats(statsStore,room){
+  if(room.statsSaved)return room;
+  const total=room.questionIds?.length||0;
+  if(room.players.length<2)return room;
+  if(!room.players.every(p=>Object.keys(p.answers||{}).length>=total))return room;
+
+  const scores=room.players.map(p=>Number(p.score||0));
+  const max=Math.max(...scores);
+  const winners=room.players.filter(p=>Number(p.score||0)===max);
+
+  for(const p of room.players){
+    const key=`user-${p.username}`;
+    let s=await statsStore.get(key,{type:"json",consistency:"strong"})||{
+      username:p.username,
+      displayName:p.displayName||p.username,
+      games:0,wins:0,points:0
+    };
+    s.displayName=p.displayName||p.username;
+    s.games=Number(s.games||0)+1;
+    s.points=Number(s.points||0)+Number(p.score||0);
+    if(winners.length===1 && winners[0].username===p.username){
+      s.wins=Number(s.wins||0)+1;
+    }
+    await statsStore.setJSON(key,s);
+  }
+  room.statsSaved=true;
+  return room;
+}
+
 export default async req=>{
   const user=await sessionUser(req);
   if(!user)return J({error:"Login to AZ11 Account first."},401);
 
   const store=getStore({name:"az11-game-rooms",consistency:"strong"});
+  const statsStore=getStore({name:"az11-game-stats",consistency:"strong"});
 
   if(req.method==="GET"){
     const code=cleanCode(new URL(req.url).searchParams.get("code"));
@@ -108,7 +140,21 @@ export default async req=>{
   try{b=await req.json()}
   catch{return J({error:"Invalid game request."},400)}
 
-  if(b.action==="create"){
+  
+  if(b.action==="leaderboard"){
+    const raw=await statsStore.list({prefix:"user-"});
+    const rows=[];
+    for(const blob of raw.blobs||[]){
+      try{
+        const s=await statsStore.get(blob.key,{type:"json",consistency:"strong"});
+        if(s)rows.push(s);
+      }catch(e){}
+    }
+    rows.sort((a,b)=>(b.wins||0)-(a.wins||0)||(b.points||0)-(a.points||0)||(a.games||0)-(b.games||0));
+    return J({leaderboard:rows.slice(0,20)});
+  }
+
+if(b.action==="create"){
     const ids=Array.isArray(b.questionIds)?b.questionIds.map(String):[];
     const answers=Array.isArray(b.correctAnswers)?b.correctAnswers.map(Number):[];
 
@@ -131,6 +177,7 @@ export default async req=>{
       questionIds:ids,
       correctAnswers:answers,
       createdAt:new Date(now).toISOString(),
+      label:String(b.label||'Friend Game').slice(0,120),
       expires:now+24*3600*1000,
       reactions:[],
       players:[{
@@ -213,6 +260,7 @@ export default async req=>{
       (sum,a)=>sum+(Number(a.point)||0),0
     );
 
+    await finalizeGameStats(statsStore,room);
     await store.setJSON(`room-${code}`,room);
     return J({point,room:roomView(room,user)});
   }

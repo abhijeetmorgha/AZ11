@@ -1,4 +1,4 @@
-const CACHE='az11-separate-admin-v1';
+const CACHE='az11-separate-admin-reports-v2';
 const STATIC=['./','./index.html','./manifest.webmanifest','./logo.png','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',e=>{

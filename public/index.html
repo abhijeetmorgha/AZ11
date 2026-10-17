@@ -745,6 +745,63 @@ body.az11-dark .nav-item:hover{background:#202a3d}
   background:var(--az11-card,#fff);font-weight:700;font-size:13px;
 }
 
+
+/* ===== AZ11 CLEAN MENU-ONLY NAVIGATION ===== */
+.mobile-menu-btn{
+  display:inline-flex !important;align-items:center;justify-content:center;
+  min-width:46px;height:46px;padding:0 12px;border:none;border-radius:12px;
+  background:var(--primary);color:#fff;font-size:24px;font-weight:900;cursor:pointer
+}
+.mobile-drawer-backdrop{
+  display:none;position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:998
+}
+.mobile-drawer{
+  display:none;position:fixed;top:0;left:0;bottom:0;width:min(88vw,350px);
+  background:#fff;z-index:999;padding:16px;overflow:auto;
+  box-shadow:12px 0 35px rgba(15,23,42,.22)
+}
+.mobile-drawer.open,.mobile-drawer-backdrop.open{display:block !important}
+.mobile-drawer-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-bottom:12px;margin-bottom:10px;border-bottom:1px solid var(--border)
+}
+.mobile-drawer .nav-btn,.mobile-drawer .nav-item{
+  display:block;width:100%;text-align:left;margin:5px 0;padding:11px 12px;
+  border:0;border-radius:10px;background:transparent;color:#334155;
+  font:inherit;font-weight:750;cursor:pointer
+}
+.mobile-drawer .nav-item:hover{background:#edf4ff;color:var(--primary)}
+.az11-menu-section{
+  margin:14px 4px 6px;font-size:11px;font-weight:900;letter-spacing:.08em;
+  color:#64748b;text-transform:uppercase
+}
+.layout{display:block !important;max-width:1400px;margin:auto}
+.layout>aside{display:none !important}
+.layout>main{width:100%}
+.mobile-bottom-nav{display:none !important}
+body{padding-bottom:0 !important}
+header .header-actions>.btn,
+header .header-actions>.az11-streak-badge{display:none !important}
+header .header-actions>.mobile-menu-btn{display:inline-flex !important}
+header{align-items:center !important}
+body.az11-dark .mobile-drawer{background:#171e2d;color:#f4f7fb}
+body.az11-dark .mobile-drawer .nav-btn,
+body.az11-dark .mobile-drawer .nav-item{color:#f4f7fb}
+body.az11-dark .mobile-drawer-head{border-color:#2a3446}
+.az11-progress{
+  height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:7px
+}
+.az11-progress>div{
+  height:100%;background:linear-gradient(90deg,#0f4cbb,#7c3aed);border-radius:999px
+}
+.az11-feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.az11-feature-card{border:1px solid var(--border);border-radius:16px;padding:15px;background:#fff}
+body.az11-dark .az11-feature-card{background:#171e2d;border-color:#2a3446}
+.analysis-section{border:1px solid var(--border);border-radius:14px;padding:12px;margin-top:10px}
+.report-btn{background:#fff7ed !important;color:#9a3412 !important;border:1px solid #fdba74 !important}
+.qbtn.visited:not(.answered):not(.review){background:#e0f2fe;border-color:#7dd3fc;color:#075985}
+.lock-chip{display:inline-block;padding:6px 9px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:900;font-size:12px}
+
 </style>
 </head>
 <body>
@@ -1631,7 +1688,7 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 const chapters=CHAPTER_CATALOG.map(x=>x.chapter);
 const topics=[...new Set(BASE_BANK.map(x=>x.topic))].sort();
-let state={page:'dashboard',exam:null,current:0,timer:null,seconds:0,answers:[],review:[],lastResult:null,adminImage:null,deadline:null};
+let state={page:'dashboard',exam:null,current:0,timer:null,seconds:0,answers:[],review:[],visited:[],questionTime:[],questionStartedAt:null,lastResult:null,adminImage:null,deadline:null};
 
 function stripQuestionForSession(q){
   const x={...q};
@@ -1648,10 +1705,10 @@ function saveSession(){
   try{
     const snap={
       page:state.page,current:state.current,seconds:state.seconds,
-      answers:state.answers,review:state.review,deadline:state.deadline,
+      answers:state.answers,review:state.review,visited:state.visited,questionTime:state.questionTime,deadline:state.deadline,
       savedAt:Date.now(),lastResultId:state.lastResult?.id||null,
       exam:state.exam?{
-        name:state.exam.name,minutes:state.exam.minutes,
+        name:state.exam.name,minutes:state.exam.minutes,mode:state.exam.mode||'',lockMode:!!state.exam.lockMode,meta:state.exam.meta||{},
         questions:state.exam.questions.map(stripQuestionForSession)
       }:null
     };
@@ -1659,7 +1716,7 @@ function saveSession(){
   }catch(e){}
 }
 function clearSavedExam(){
-  state.exam=null;state.current=0;state.answers=[];state.review=[];
+  state.exam=null;state.current=0;state.answers=[];state.review=[];state.visited=[];state.questionTime=[];state.questionStartedAt=null;
   state.deadline=null;state.seconds=0;
 }
 function restoreSession(){
@@ -1669,7 +1726,7 @@ function restoreSession(){
     const snap=JSON.parse(raw);
     if(!snap||typeof snap!=='object')return false;
 
-    const validPages=new Set(['dashboard','fulltests','tests','chaptertests','diagrams','pdftests','pyq','custom','friendgame','performance','history','wrong','bookmarks','notes','account','about','exam','result']);
+    const validPages=new Set(['dashboard','dailyplan','weak','revision','analysis','fulltests','tests','chaptertests','diagrams','pdftests','pyq','custom','friendgame','performance','history','wrong','bookmarks','notes','account','about','exam','result']);
     state.page=validPages.has(snap.page)?snap.page:'dashboard';
 
     if(snap.lastResultId){
@@ -1683,6 +1740,7 @@ function restoreSession(){
       state.exam={
         name:snap.exam.name||'Saved NEET Test',
         minutes:Number(snap.exam.minutes)||20,
+        mode:snap.exam.mode||'',lockMode:!!snap.exam.lockMode,meta:snap.exam.meta||{},
         questions:snap.exam.questions.map(restoreQuestionFromSession)
       };
       state.current=Math.min(Math.max(0,Number(snap.current)||0),state.exam.questions.length-1);
@@ -1692,6 +1750,14 @@ function restoreSession(){
 
       state.review=Array.isArray(snap.review)?snap.review.slice(0,state.exam.questions.length):[];
       while(state.review.length<state.exam.questions.length)state.review.push(false);
+
+      state.visited=Array.isArray(snap.visited)?snap.visited.slice(0,state.exam.questions.length):[];
+      while(state.visited.length<state.exam.questions.length)state.visited.push(false);
+      state.visited[state.current]=true;
+
+      state.questionTime=Array.isArray(snap.questionTime)?snap.questionTime.slice(0,state.exam.questions.length).map(x=>Number(x)||0):[];
+      while(state.questionTime.length<state.exam.questions.length)state.questionTime.push(0);
+      state.questionStartedAt=Date.now();
 
       state.deadline=Number(snap.deadline)||null;
       if(state.deadline){
@@ -1838,42 +1904,336 @@ async function openInviteFromUrl(){
   }catch(e){}
 }
 
+
+const AZ11_REVISION_KEY='az11_revision_queue_v2';
+const AZ11_REVISION_BOOT='az11_revision_bootstrap_v1';
+const REVISION_DAYS=[1,3,7,14];
+
+function dayStartMs(t=Date.now()){
+  const d=new Date(t);d.setHours(0,0,0,0);return d.getTime();
+}
+function resultTime(r){
+  if(Number(r.completedAt))return Number(r.completedAt);
+  const p=Date.parse(r.date||'');return Number.isFinite(p)?p:Number(r.id)||0;
+}
+function progressBar(v,max){
+  const pct=max?Math.min(100,Math.round(v/max*100)):0;
+  return `<div class="az11-progress"><div style="width:${pct}%"></div></div>`;
+}
+function dailyProgress(){
+  const today=dayStartMs(),tomorrow=today+86400000;
+  const rr=getResults().filter(r=>{const t=resultTime(r);return t>=today&&t<tomorrow});
+  const questions=rr.reduce((s,r)=>s+Number((r.correct||0)+(r.wrong||0)),0);
+  const tests=rr.length;
+  const revisions=rr.filter(r=>r.mode==='revision'||/Revision/i.test(r.name||'')).length;
+  return {questions,tests,revisions,goalQ:80,goalTests:2,goalRev:1};
+}
+function dailyPlanPage(){
+  const d=dailyProgress();
+  return layout(`<h1 class="page-title">🎯 Daily NEET Target</h1>
+    <div class="neet-only">Daily target: <b>80 attempted questions • 2 tests • 1 revision session</b>. Progress updates automatically from your test results.</div>
+    <div class="grid stats">
+      <div class="card"><div class="muted">Questions</div><div class="metric">${d.questions}/${d.goalQ}</div>${progressBar(d.questions,d.goalQ)}</div>
+      <div class="card"><div class="muted">Tests</div><div class="metric">${d.tests}/${d.goalTests}</div>${progressBar(d.tests,d.goalTests)}</div>
+      <div class="card"><div class="muted">Revision</div><div class="metric">${d.revisions}/${d.goalRev}</div>${progressBar(d.revisions,d.goalRev)}</div>
+      <div class="card"><div class="muted">Status</div><div class="metric">${d.questions>=d.goalQ&&d.tests>=d.goalTests&&d.revisions>=d.goalRev?'✅':'🎯'}</div><div class="small">${d.questions>=d.goalQ&&d.tests>=d.goalTests&&d.revisions>=d.goalRev?'Target complete':'Keep going'}</div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Quick Actions</h2>
+      <div class="row">
+        <button class="btn" onclick="startDaily()">⚡ 20-Q Daily Challenge</button>
+        <button class="btn secondary" onclick="go('weak')">🧠 Practice Weak Topic</button>
+        <button class="btn secondary" onclick="go('revision')">🔁 Due Revision</button>
+      </div>
+    </div>`)
+}
+
+function weakAreaStats(){
+  const map=new Map();
+  for(const r of getResults()){
+    for(const d of (r.details||[])){
+      if(!d?.q||d.status==='unattempted')continue;
+      const q=d.q,key=[q.subject||'',q.chapter||'',q.topic||''].join('|||');
+      if(!map.has(key))map.set(key,{subject:q.subject||'',chapter:q.chapter||'',topic:q.topic||'',attempts:0,correct:0,wrong:0});
+      const x=map.get(key);x.attempts++;
+      if(d.status==='correct')x.correct++;else if(d.status==='wrong')x.wrong++;
+    }
+  }
+  return [...map.values()].map(x=>({...x,accuracy:x.attempts?Math.round(x.correct/x.attempts*100):0}))
+    .sort((a,b)=>a.accuracy-b.accuracy||b.wrong-a.wrong||b.attempts-a.attempts);
+}
+function smartPracticeQuestions(area,count=20){
+  let pool=allQuestions().filter(q=>
+    (!area.subject||q.subject===area.subject)&&
+    (!area.chapter||q.chapter===area.chapter)&&
+    (!area.topic||q.topic===area.topic)&&q.type!=='Diagram'
+  );
+  if(pool.length<count)pool=allQuestions().filter(q=>
+    (!area.subject||q.subject===area.subject)&&
+    (!area.chapter||q.chapter===area.chapter)&&q.type!=='Diagram'
+  );
+  const seen=new Set(),out=[];
+  for(const q of pool.slice().sort(()=>Math.random()-.5)){
+    const k=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
+    if(!k||seen.has(k))continue;seen.add(k);out.push(clone(q));
+    if(out.length>=count)break;
+  }
+  return out.map((q,i)=>({...q,runId:i+1}));
+}
+function startWeakArea(i){
+  const area=weakAreaStats()[Number(i)];
+  if(!area)return toast('Weak topic not found.');
+  const qs=smartPracticeQuestions(area,20);
+  if(!qs.length)return toast('No practice questions available yet.');
+  startExam(`Smart Weak Topic • ${area.chapter} • ${area.topic}`,qs,20,{mode:'weak',meta:{area}});
+}
+function weakTopicPage(){
+  const a=weakAreaStats().slice(0,12);
+  if(!a.length)return layout(`<h1 class="page-title">🧠 Smart Weak Topic Mode</h1><div class="card empty">Attempt some tests first. AZ11 will automatically detect your weakest chapters/topics.</div>`);
+  return layout(`<h1 class="page-title">🧠 Smart Weak Topic Mode</h1>
+    <div class="neet-only">AZ11 ranks areas using your attempted questions. Lowest accuracy and repeated mistakes appear first.</div>
+    <div class="test-grid">${a.map((x,i)=>`<div class="card">
+      <span class="pill">${esc(x.subject)}</span><span class="pill">${x.accuracy}% accuracy</span>
+      <h3>${esc(x.chapter)}</h3><div class="muted">${esc(x.topic)}</div>
+      <p>${x.correct} correct • ${x.wrong} wrong • ${x.attempts} attempted</p>
+      ${progressBar(x.accuracy,100)}
+      <br><button class="btn" onclick="startWeakArea(${i})">Practice This Weak Area</button>
+    </div>`).join('')}</div>`)
+}
+
+function mistakeItems(){
+  const map=new Map();
+  for(const r of getResults()){
+    for(const d of (r.details||[])){
+      if(d.status!=='wrong'||!d.q)continue;
+      const key=String(d.q.baseId||d.q.id||d.q.q);
+      const old=map.get(key)||{q:d.q,count:0,lastAns:d.ans,lastAt:0};
+      old.count++;old.q=d.q;old.lastAns=d.ans;old.lastAt=Math.max(old.lastAt,resultTime(r));
+      map.set(key,old);
+    }
+  }
+  return [...map.values()].sort((a,b)=>b.lastAt-a.lastAt||b.count-a.count);
+}
+function mistakeNotebookPage(){
+  const m=mistakeItems();
+  return layout(`<h1 class="page-title">📝 Mistake Notebook</h1>
+    <div class="neet-only">${m.length?`Tracking <b>${m.length}</b> unique mistakes. Repeated mistakes are counted together.`:'Your wrong answers will automatically appear here.'}</div>
+    ${m.length?m.map((x,i)=>`<div class="review-card">
+      <button class="bookmark-btn" onclick="toggleBookmark(${JSON.stringify(x.q.id)})">${getBookmarks().includes(x.q.id)?'★':'☆'}</button>
+      <div class="q-number">Mistake ${i+1} • Wrong ${x.count} time${x.count===1?'':'s'} • ${esc(x.q.subject)} • ${esc(x.q.chapter)} • ${esc(x.q.topic)}</div>
+      <div class="q-text">${x.q.q}</div>${qVisual(x.q)}
+      <p><b>Your latest wrong answer:</b> ${answerText(x.q,x.lastAns)}</p>
+      <p><b>Correct answer:</b> <span class="correct">${correctAnswerText(x.q)}</span></p>
+      <div class="explanation"><b>Explanation:</b><br>${x.q.e||'No explanation added.'}</div>
+      <p><b>Concept:</b> ${x.q.concept||x.q.topic||''}</p>
+      <div class="row"><button class="btn secondary report-btn" onclick="reportQuestionById(${JSON.stringify(String(x.q.id))})">⚠️ Report Question</button></div>
+    </div>`).join(''):'<div class="card empty">No mistakes yet 🎉</div>'}`)
+}
+
+function getRevisionQueue(){
+  let q=[];
+  try{q=JSON.parse(localStorage.getItem(AZ11_REVISION_KEY)||'[]')}catch(e){}
+  if(!Array.isArray(q))q=[];
+  if(!localStorage.getItem(AZ11_REVISION_BOOT)){
+    const now=Date.now(),seen=new Set(q.map(x=>String(x.key)));
+    for(const x of mistakeItems()){
+      const key=String(x.q.baseId||x.q.id);
+      if(seen.has(key))continue;
+      q.push({key,questionId:String(x.q.id),stage:0,nextDue:now,addedAt:now,lastStatus:'historical'});
+      seen.add(key);
+    }
+    localStorage.setItem(AZ11_REVISION_BOOT,'1');
+    localStorage.setItem(AZ11_REVISION_KEY,JSON.stringify(q));
+  }
+  return q;
+}
+function saveRevisionQueue(q){localStorage.setItem(AZ11_REVISION_KEY,JSON.stringify(q))}
+function scheduleWrongQuestions(details,at=Date.now()){
+  let q=getRevisionQueue();
+  for(const d of details||[]){
+    if(d.status!=='wrong'||!d.q)continue;
+    const key=String(d.q.baseId||d.q.id),id=String(d.q.id);
+    let x=q.find(z=>String(z.key)===key);
+    if(!x){x={key,questionId:id,stage:0,addedAt:at};q.push(x)}
+    x.questionId=id;x.stage=0;x.lastStatus='wrong';x.nextDue=at+REVISION_DAYS[0]*86400000;
+  }
+  saveRevisionQueue(q);
+}
+function updateRevisionAfterResult(details,at=Date.now()){
+  let q=getRevisionQueue();
+  for(const d of details||[]){
+    if(!d.q)continue;
+    const key=String(d.q.baseId||d.q.id);
+    const x=q.find(z=>String(z.key)===key);
+    if(!x)continue;
+    if(d.status==='correct'){
+      x.stage=Number(x.stage||0)+1;x.lastStatus='correct';
+      if(x.stage>=REVISION_DAYS.length){
+        q=q.filter(z=>String(z.key)!==key);
+      }else{
+        x.nextDue=at+REVISION_DAYS[x.stage]*86400000;
+      }
+    }else if(d.status==='wrong'){
+      x.stage=0;x.lastStatus='wrong';x.nextDue=at+REVISION_DAYS[0]*86400000;
+    }
+  }
+  saveRevisionQueue(q);
+}
+function revisionQuestion(x){
+  const bank=allQuestions();
+  return bank.find(q=>String(q.id)===String(x.questionId))||
+         bank.find(q=>String(q.baseId||q.id)===String(x.key))||null;
+}
+function startRevisionDue(){
+  const now=Date.now(),due=getRevisionQueue().filter(x=>Number(x.nextDue||0)<=now).slice(0,20);
+  const qs=due.map(revisionQuestion).filter(Boolean);
+  if(!qs.length)return toast('No revision questions are due right now.');
+  startExam(`Revision Scheduler • ${qs.length} Due Questions`,qs,Math.max(10,qs.length),{mode:'revision',meta:{revisionKeys:due.map(x=>x.key)}});
+}
+function revisionPage(){
+  const q=getRevisionQueue(),now=Date.now(),due=q.filter(x=>Number(x.nextDue||0)<=now);
+  const upcoming=q.filter(x=>Number(x.nextDue||0)>now).sort((a,b)=>a.nextDue-b.nextDue);
+  return layout(`<h1 class="page-title">🔁 Revision Scheduler</h1>
+    <div class="neet-only">Spaced revision cycle: <b>1 day → 3 days → 7 days → 14 days</b>. Wrong answers are added automatically.</div>
+    <div class="grid stats">
+      <div class="card"><div class="muted">Due Now</div><div class="metric">${due.length}</div></div>
+      <div class="card"><div class="muted">Scheduled</div><div class="metric">${upcoming.length}</div></div>
+      <div class="card"><div class="muted">Total Queue</div><div class="metric">${q.length}</div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <button class="btn" onclick="startRevisionDue()">Start Due Revision</button>
+    </div>
+    <div class="card" style="margin-top:16px"><h2>Next Reviews</h2>
+      ${q.length?q.slice().sort((a,b)=>a.nextDue-b.nextDue).slice(0,30).map(x=>{const z=revisionQuestion(x);return `<div class="item"><b>${z?esc(z.chapter):'Question'} • Stage ${Number(x.stage||0)+1}/4</b><div class="small muted">${Number(x.nextDue||0)<=now?'Due now':new Date(x.nextDue).toLocaleString()}</div></div>`}).join(''):'<div class="empty">No revision items yet.</div>'}
+    </div>`)
+}
+
+function isFullResult(r){return Number(r.total)===180||/Full Mock|180 Questions/i.test(r.name||'')}
+function chapterStrength(details){
+  const map=new Map();
+  for(const d of details||[]){
+    if(!d.q||d.status==='unattempted')continue;
+    const k=`${d.q.subject||''} • ${d.q.chapter||'Unknown'}`;
+    if(!map.has(k))map.set(k,{name:k,c:0,t:0,w:0});
+    const x=map.get(k);x.t++;if(d.status==='correct')x.c++;if(d.status==='wrong')x.w++;
+  }
+  const a=[...map.values()].map(x=>({...x,acc:x.t?Math.round(x.c/x.t*100):0})).sort((a,b)=>b.acc-a.acc||b.t-a.t);
+  return {strong:a[0]||null,weak:a.slice().sort((a,b)=>a.acc-b.acc||b.w-a.w)[0]||null};
+}
+function fullResultAnalysis(r){
+  const sections=['Physics','Chemistry','Botany','Zoology'];
+  const sec=sections.map(s=>{
+    const d=(r.details||[]).filter(x=>questionSection(x.q)===s);
+    const c=d.filter(x=>x.status==='correct').length,w=d.filter(x=>x.status==='wrong').length,u=d.length-c-w;
+    const time=d.reduce((sum,x)=>sum+Number(x.timeSpent||0),0);
+    return {s,c,w,u,total:d.length,score:c*4-w,time,avg:d.length?Math.round(time/d.length):0};
+  });
+  const cs=chapterStrength(r.details||[]);
+  const avg=r.total?Math.round(Number(r.used||0)/r.total):0;
+  return {sec,cs,avg,negative:Number(r.wrong||0)};
+}
+function fullAnalysisPage(){
+  const rr=getResults().filter(isFullResult).slice().reverse();
+  if(!rr.length)return layout(`<h1 class="page-title">📊 Full Test Analysis</h1><div class="card empty">Complete a 180-question Full Mock to unlock detailed section and chapter analysis.</div>`);
+  return layout(`<h1 class="page-title">📊 Full Test Analysis</h1>
+    <div class="neet-only">Section score, negative marks, average time/question and strongest/weakest chapter are calculated automatically.</div>
+    ${rr.slice(0,10).map(r=>{const a=fullResultAnalysis(r);return `<div class="card" style="margin-bottom:16px">
+      <div class="row" style="justify-content:space-between"><div><h2 style="margin:0">${esc(r.name)}</h2><div class="small muted">${esc(r.date)}</div></div><div class="metric">${r.score}/720</div></div>
+      <div class="grid stats" style="margin-top:12px">
+        <div class="card"><div class="muted">Accuracy</div><div class="metric">${r.accuracy}%</div></div>
+        <div class="card"><div class="muted">Negative Marks</div><div class="metric">${a.negative}</div></div>
+        <div class="card"><div class="muted">Avg Time / Q</div><div class="metric">${a.avg}s</div></div>
+        <div class="card"><div class="muted">Used Time</div><div class="metric">${formatTime(r.used||0)}</div></div>
+      </div>
+      ${a.sec.map(x=>`<div class="analysis-section"><b>${x.s}</b> — Score ${x.score}/${x.total*4} • ✅ ${x.c} • ❌ ${x.w} • ⭕ ${x.u}${x.time?` • ⏱ ${x.avg}s/Q`:''}</div>`).join('')}
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><b>💪 Strongest Chapter</b><p>${a.cs.strong?`${esc(a.cs.strong.name)} — ${a.cs.strong.acc}%`:'Not enough data'}</p></div>
+        <div class="card"><b>🎯 Weakest Chapter</b><p>${a.cs.weak?`${esc(a.cs.weak.name)} — ${a.cs.weak.acc}%`:'Not enough data'}</p></div>
+      </div>
+    </div>`}).join('')}`)
+}
+
+function trackCurrentQuestionTime(){
+  if(!state.exam||state.page!=='exam'||state.questionStartedAt==null)return;
+  const now=Date.now(),delta=Math.max(0,Math.min(10*60*1000,now-state.questionStartedAt));
+  state.questionTime[state.current]=(Number(state.questionTime[state.current])||0)+Math.round(delta/1000);
+  state.questionStartedAt=now;
+}
+function markVisited(i){
+  if(!state.visited.length&&state.exam)state.visited=new Array(state.exam.questions.length).fill(false);
+  if(state.visited[i]!=null)state.visited[i]=true;
+}
+async function reportQuestionById(id){
+  if(!accountState?.user){toast('Login to Account first to report a question.');return}
+  const q=(state.exam?.questions||[]).find(x=>String(x.id)===String(id))||
+          allQuestions().find(x=>String(x.id)===String(id));
+  if(!q)return toast('Question not found.');
+  const reason=prompt('Report reason: wrong answer key, duplicate, unclear, typo, or other issue?');
+  if(!reason||!reason.trim())return;
+  try{
+    const r=await fetch('/api/reports',{method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',
+      body:JSON.stringify({questionId:String(q.id),questionText:String(q.q||'').slice(0,1200),reason:reason.trim().slice(0,500),
+        subject:q.subject||'',chapter:q.chapter||'',topic:q.topic||''})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);
+    toast('Question report sent ✅');
+  }catch(e){toast(e.message||'Report failed.')}
+}
+
 function layout(content){
-  const p=profileStats();
-  const mobileNav=`${nav('dashboard','🏠 Dashboard')}${nav('fulltests','🏆 Full / All-Over Tests')}${nav('chaptertests','📚 Chapter-Wise Tests')}${nav('diagrams','🖼️ Diagram Questions')}${nav('pdftests','📄 PDF Tests')}${nav('pyq','📜 PYQ Pattern')}${nav('custom','⚙️ Custom Test')}${nav('friendgame','🎮 Friend Game')}<button class="nav-item" onclick="shareAZ11App();toggleMobileMenu(false)">📤 Share App</button><button class="nav-item" onclick="toggleAZ11Theme();toggleMobileMenu(false)">🌓 Theme</button>${nav('performance','📈 Performance')}${nav('history','📊 Test History')}${nav('wrong','❌ Wrong Questions')}${nav('bookmarks','🔖 Bookmarks')}${nav('notes','📒 Notes')}${nav('account','👤 Account')}${nav('about','ℹ️ About')}`;
+  const s=getDailyStreak();
+  const mobileNav=`
+    <div class="az11-menu-section">Main</div>
+    ${nav('dashboard','🏠 Dashboard')}
+    ${nav('dailyplan','🎯 Daily NEET Target')}
+    ${nav('weak','🧠 Smart Weak Topic')}
+    ${nav('revision','🔁 Revision Scheduler')}
+    ${nav('analysis','📊 Full Test Analysis')}
+
+    <div class="az11-menu-section">Tests</div>
+    ${nav('fulltests','🏆 Full / All-Over Tests')}
+    ${nav('chaptertests','📚 Chapter-Wise Tests')}
+    ${nav('diagrams','🖼️ Diagram Questions')}
+    ${nav('pdftests','📄 PDF Tests')}
+    ${nav('pyq','📜 PYQ Pattern')}
+    ${nav('custom','⚙️ Custom Test')}
+    ${nav('friendgame','🎮 Friend / Chapter Challenge')}
+
+    <div class="az11-menu-section">Review & Progress</div>
+    ${nav('performance','📈 Performance')}
+    ${nav('history','📊 Test History')}
+    ${nav('wrong','📝 Mistake Notebook')}
+    ${nav('bookmarks','🔖 Bookmarks')}
+    ${nav('notes','📒 Notes')}
+
+    <div class="az11-menu-section">App</div>
+    ${nav('account','👤 Account')}
+    <button class="nav-item" onclick="startDaily();toggleMobileMenu(false)">⚡ Start Daily Challenge</button>
+    <button class="nav-item" onclick="shareAZ11App();toggleMobileMenu(false)">📤 Share App</button>
+    <button class="nav-item" onclick="toggleAZ11Theme();toggleMobileMenu(false)">🌓 ${az11ThemeLabel()}</button>
+    <button class="nav-item" data-install-app onclick="installPWA();toggleMobileMenu(false)">📲 Install App</button>
+    ${nav('about','ℹ️ About')}
+  `;
   return `<header>
-    <div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11 <span class="version-chip">AZ11</span><br><span class="small muted">PCB • NEET Syllabus Only</span></div></div>
+    <div class="brand">
+      <div class="logo"><img src="./logo.png" alt="AZ11 logo"></div>
+      <div>AZ11 <span class="version-chip">AZ11</span><br>
+        <span class="small muted">PCB • NEET Syllabus Only • 🔥 ${s.streak||0} day • 🪙 ${s.coins||0}</span>
+      </div>
+    </div>
     <div class="header-actions">
       <button class="mobile-menu-btn" onclick="toggleMobileMenu(true)" aria-label="Open menu">☰</button>
-      <button class="btn secondary" onclick="go('fulltests')">Full Tests</button>
-      <button class="btn secondary" onclick="go('chaptertests')">Chapter Tests</button>
-      <button class="btn secondary" onclick="go('diagrams')">Diagram Questions</button>
-      <button class="btn secondary" onclick="go('pdftests')">PDF Tests</button>
-      <button class="btn" onclick="startDaily()">Daily Challenge</button>
-      <button class="btn secondary" onclick="go('friendgame')">🎮 Friend Game</button>
-      <span class="az11-streak-badge" title="Daily streak">${(()=>{const s=getDailyStreak();return `🔥 ${s.streak||0} day • 🪙 ${s.coins||0}`})()}</span>
-      <button class="btn secondary" onclick="shareAZ11App()">📤 Share App</button>
-      <button class="btn secondary" onclick="toggleAZ11Theme()">${az11ThemeLabel()}</button>
-      <button class="btn secondary" onclick="go('account')">👤 Account</button>
-      <button class="btn green" id="installAppBtn" data-install-app onclick="installPWA()">📲 Install App</button>
     </div>
   </header>
   <div id="mobileBackdrop" class="mobile-drawer-backdrop" onclick="toggleMobileMenu(false)"></div>
   <div id="mobileDrawer" class="mobile-drawer">
     <div class="mobile-drawer-head">
-      <div><b>AZ11</b><br><span class="small muted">AZ11</span></div>
+      <div><b>AZ11 Menu</b><br><span class="small muted">All features in one place</span></div>
       <button class="btn gray" onclick="toggleMobileMenu(false)">✕</button>
     </div>
     ${mobileNav}
   </div>
-  <div class="layout"><aside>${mobileNav}</aside><main>${content}</main></div>
-  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-    <button class="${state.page==='dashboard'?'active':''}" onclick="go('dashboard')"><span>🏠</span><span>Dashboard</span></button>
-    <button class="${state.page==='chaptertests'?'active':''}" onclick="go('chaptertests')"><span>📚</span><span>Tests</span></button>
-    <button class="${state.page==='performance'?'active':''}" onclick="go('performance')"><span>📈</span><span>Progress</span></button>
-    <button class="${state.page==='about'?'active':''}" onclick="go('about')"><span>ℹ️</span><span>About</span></button>
-    <button onclick="toggleMobileMenu(true)"><span>☰</span><span>Menu</span></button>
-  </nav>`
+  <div class="layout"><main>${content}</main></div>`
 }
 function nav(page,label){return `<button class="nav-btn ${state.page===page?'active':''}" onclick="go('${page}')">${label}</button>`}
 function go(page){if(page==='admin'||page==='myadded'){toast('Owner Admin is private.');return}if(page!=='friendgame')stopFriendGamePolling();if(state.timer){clearInterval(state.timer);state.timer=null}document.body.style.overflow='';state.page=page;saveSession();render()}
@@ -1890,23 +2250,49 @@ function toggleMobileMenu(open){
 }
 
 function dashboard(){
-  const r=getResults(),p=profileStats(),attempted=r.length,totalQ=r.reduce((s,x)=>s+x.total,0),correct=r.reduce((s,x)=>s+x.correct,0),acc=totalQ?Math.round(correct/totalQ*100):0,best=r.length?Math.max(...r.map(x=>x.score)):0;
-  const myDiagrams=getRemoteQuestions().filter(q=>q.type==='Diagram').length;
+  const r=getResults(),p=profileStats(),totalQ=r.reduce((s,x)=>s+x.total,0),correct=r.reduce((s,x)=>s+x.correct,0),acc=totalQ?Math.round(correct/totalQ*100):0,best=r.length?Math.max(...r.map(x=>x.score)):0;
+  const d=dailyProgress(),weak=weakAreaStats()[0],due=getRevisionQueue().filter(x=>Number(x.nextDue||0)<=Date.now()).length;
   return layout(`<div class="az11-hero">
     <h1>AZ11</h1>
-    <div>NEET PCB Practice • Personal Owner-Published Content • Offline + Sync</div>
+    <div>NEET PCB Practice • Smart Revision • Friend Challenges • Offline + Sync</div>
     <div class="az11-grid4">
-      <div class="az11-stat"><b>180</b>Full Test</div>
+      <div class="az11-stat"><b>120</b>Full Mocks</div>
       <div class="az11-stat"><b>720</b>Marks</div>
-      <div class="az11-stat"><b>${getRemoteQuestions().length}</b>Synced Qs</div>
+      <div class="az11-stat"><b>${allQuestions().length}</b>Questions</div>
       <div class="az11-stat"><b>${getSyncedNotes().length}</b>Notes</div>
     </div>
   </div>
   <h1 class="page-title">Dashboard</h1>
-  <div class="grid stats"><div class="card"><div class="muted">Question Bank</div><div class="metric">${allQuestions().length}</div><div class="small muted">2K+ practice variants</div></div><div class="card"><div class="muted">Available Tests</div><div class="metric">${TESTS.length}+</div><div class="small muted">Full + chapter + diagram + PYQ</div></div><div class="card"><div class="muted">Overall Accuracy</div><div class="metric">${acc}%</div></div><div class="card"><div class="muted">Best Score</div><div class="metric">${best}/80</div></div></div>
-  <div class="card xp-card" style="margin-top:16px"><div class="small">YOUR JOSH MODE</div><div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap"><div><div style="font-size:30px;font-weight:900">${p.level}</div><div>${p.points} XP • ${p.streak} test streak</div></div><div><b>Next level:</b> ${p.next} XP</div></div><div class="xp-bar"><div class="xp-fill" style="width:${p.pct}%"></div></div><div class="badge-row">${badges().map(x=>`<span class="badge">${x}</span>`).join('')||'<span class="badge">Start your first test 🚀</span>'}</div></div>
-  <div class="subject-strip" style="margin-top:16px"><button class="subject-btn" onclick="quickSubject('Biology')">🧬 Biology</button><button class="subject-btn" onclick="quickSubject('Chemistry')">⚗️ Chemistry</button><button class="subject-btn" onclick="quickSubject('Physics')">⚡ Physics</button><button class="subject-btn" onclick="go('chaptertests')">📚 Chapter Wise</button><button class="subject-btn" onclick="go('diagrams')">🖼 Diagram Based</button><button class="subject-btn" onclick="go('pdftests')">📄 PDF Tests</button><button class="subject-btn" onclick="go('pyq')">📜 PYQ Pattern</button></div>
-  <div class="grid" style="grid-template-columns:2fr 1fr;margin-top:16px"><div class="card"><h2>Performance Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div><div class="card install-card"><h2>Install on Mobile</h2><p class="muted">When this PWA package is hosted on HTTPS, tap Install App / Add to Home Screen. The AZ11 logo will appear on the mobile home screen.</p><button class="btn green" data-install-app onclick="installPWA()">📲 Install App</button><p class="small muted">Owner diagram questions: ${myDiagrams}</p></div></div>
+  <div class="grid stats">
+    <div class="card"><div class="muted">Overall Accuracy</div><div class="metric">${acc}%</div></div>
+    <div class="card"><div class="muted">Tests Attempted</div><div class="metric">${r.length}</div></div>
+    <div class="card"><div class="muted">Best Score</div><div class="metric">${best}</div></div>
+    <div class="card"><div class="muted">Revision Due</div><div class="metric">${due}</div></div>
+  </div>
+  <div class="card xp-card" style="margin-top:16px">
+    <div class="small">YOUR JOSH MODE</div>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap">
+      <div><div style="font-size:30px;font-weight:900">${p.level}</div><div>${p.points} XP • ${p.streak} test streak</div></div>
+      <div><b>Next level:</b> ${p.next} XP</div>
+    </div>
+    <div class="xp-bar"><div class="xp-fill" style="width:${p.pct}%"></div></div>
+    <div class="badge-row">${badges().map(x=>`<span class="badge">${x}</span>`).join('')||'<span class="badge">Start your first test 🚀</span>'}</div>
+  </div>
+
+  <div class="az11-feature-grid" style="margin-top:16px">
+    <div class="az11-feature-card"><b>🎯 Today</b><div class="metric">${d.questions}/80</div><div class="small muted">questions attempted • ${d.tests}/2 tests • ${d.revisions}/1 revision</div>${progressBar(d.questions,80)}</div>
+    <div class="az11-feature-card"><b>🧠 Weakest Area</b><div style="font-size:19px;font-weight:900;margin-top:10px">${weak?esc(weak.chapter):'Complete tests first'}</div><div class="small muted">${weak?`${esc(weak.topic)} • ${weak.accuracy}% accuracy`:'AZ11 will detect it automatically.'}</div></div>
+    <div class="az11-feature-card"><b>🔁 Revision</b><div class="metric">${due}</div><div class="small muted">questions due now • 1/3/7/14-day cycle</div></div>
+    <div class="az11-feature-card"><b>☰ Clean Navigation</b><div style="font-size:18px;font-weight:900;margin-top:10px">Use the three-lines menu</div><div class="small muted">All app features are kept inside ☰ so the dashboard stays clean.</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:2fr 1fr;margin-top:16px">
+    <div class="card"><h2>Performance Trend</h2><canvas id="perfChart" class="performance-canvas" width="900" height="260"></canvas></div>
+    <div class="card"><h2>Study Intelligence</h2>
+      <p>🧠 Smart weak-topic detection</p><p>📝 Mistake notebook</p><p>🔁 Spaced revision</p><p>📊 Full mock analysis</p>
+      <div class="small muted">Open ☰ to access each feature.</div>
+    </div>
+  </div>
   <div class="card" style="margin-top:16px"><h2>Recent Performance</h2>${historyTable(r.slice(-5).reverse())}</div>`)
 }
 function quickSubject(subject){startExam(`${subject} Mixed NEET Test`,pickQuestions({subject},20),20)}
@@ -2036,7 +2422,7 @@ function startFullNeet180(testNo=1){
     const part=picked.filter(q=>questionSection(q)===sec);
     ordered.push(...az11SeededShuffle(part,880000+testNo*313+si*37));
   }
-  startExam(`AZ11 NEET Full Mock ${testNo} • 180 Questions`,ordered,180);
+  startExam(`AZ11 NEET Full Mock ${testNo} • 180 Questions`,ordered,180,{mode:'full',lockMode:true,meta:{testNo}});
 }
 function fullTestsPage(){
   const cards=Array.from({length:120},(_,i)=>{
@@ -2182,15 +2568,20 @@ function updateTopicFilter(){const sub=document.getElementById('cSubject').value
 function customPage(){return layout(`<h1 class="page-title">Custom Topic Test</h1><div class="card"><div class="form"><label>Subject<select id="cSubject" onchange="updateCustomFilters()"><option value="">PCB Mixed</option><option>Biology</option><option>Chemistry</option><option>Physics</option></select></label><label>Class<select id="cClass" onchange="updateCustomFilters()"><option value="">Both</option><option value="11">Class 11</option><option value="12">Class 12</option></select></label><label>Chapter<select id="cChapter" onchange="updateTopicFilter()"><option value="">All Chapters</option>${chapters.map(x=>`<option>${x}</option>`).join('')}</select></label><label>Topic<select id="cTopic"><option value="">All Topics</option>${topics.map(x=>`<option>${x}</option>`).join('')}</select></label><label>Question Type<select id="cType"><option value="">All Types</option><option>Theory</option><option>Statement</option><option>Diagram</option></select></label><label>Source<select id="cSource"><option value="">All</option><option value="PYQ Pattern (Paraphrased)">PYQ Pattern</option><option value="Original Practice">Original Practice</option></select></label><label>Difficulty<select id="cDiff"><option>Easy</option><option selected>Hard</option><option>Very Hard</option></select></label><label>Questions<select id="cCount"><option>20</option><option>40</option><option>60</option></select></label><label>Timer<select id="cTime"><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option></select></label><button class="btn" onclick="startCustom()">Generate Test</button></div></div>`)}
 function startCustom(){const f={subject:document.getElementById('cSubject').value,class:document.getElementById('cClass').value,chapter:document.getElementById('cChapter').value,topic:document.getElementById('cTopic').value,type:document.getElementById('cType').value,source:document.getElementById('cSource').value,difficulty:document.getElementById('cDiff').value};const count=+document.getElementById('cCount').value,mins=+document.getElementById('cTime').value;startExam('Custom NEET Test',pickQuestions(f,count),mins)}
 
-function startExam(name,questions,minutes){
+function startExam(name,questions,minutes,opts={}){
   if(!questions||!questions.length)return;
-  state.exam={name,questions,minutes};
+  state.exam={name,questions,minutes,mode:opts.mode||'',lockMode:!!opts.lockMode,meta:opts.meta||{}};
   state.current=0;
   state.answers=new Array(questions.length).fill(null);
   state.review=new Array(questions.length).fill(false);
+  state.visited=new Array(questions.length).fill(false);
+  state.visited[0]=true;
+  state.questionTime=new Array(questions.length).fill(0);
+  state.questionStartedAt=Date.now();
   state.seconds=minutes*60;
   state.deadline=Date.now()+state.seconds*1000;
   state.page='exam';
+  if(state.exam.lockMode){try{history.pushState({az11ExamLock:true},'',location.href)}catch(e){}}
   saveSession();
   render();
   runTimer();
@@ -2227,9 +2618,11 @@ function examPage(){
   const q=state.exam.questions[state.current];
   const pdf=state.exam.pdfTest;
   const pdfViewer=pdf?`<div class="card pdf-test-viewer" style="padding:10px;margin-bottom:14px"><div class="row pdf-test-head" style="justify-content:space-between;align-items:center"><b>📄 ${esc(pdf.title||'PDF Paper')}</b><a class="btn secondary" href="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}" target="_blank">Open PDF</a></div><iframe src="/api/pdf-test-file?id=${encodeURIComponent(pdf.id)}#toolbar=1&navpanes=0" title="PDF Test Paper" style="width:100%;height:58vh;min-height:420px;border:0;border-radius:12px;margin-top:10px;background:#fff"></iframe></div>`:'';
-  return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
+  return `<header><div class="brand"><div class="logo"><img src="./logo.png" alt="AZ11 logo"></div><div>AZ11<br><span class="small muted">${state.exam.name}</span></div></div><div class="header-actions"><button class="btn secondary" onclick="exitTest()">Exit Test</button><button class="btn red" onclick="submitExam()">Submit Test</button></div></header><main class="exam-wrap"><div class="exam-top"><div><b>${state.exam.name}</b><div class="small muted">${state.exam.questions.length} Questions • ${q.difficulty} • +4/−1 ${state.exam.lockMode?'• 🔒 Exam Lock Mode':''}</div></div><div>Time Left: <span id="timer" class="timer">${formatTime(state.seconds)}</span></div></div>${pdfViewer}<div class="exam-grid"><div class="question-card"><div class="q-number">Question ${state.current+1} of ${state.exam.questions.length} • ${q.subject} • ${q.type||'Theory'} • ${q.source||'Practice'}</div><div class="q-text">${q.q}</div>${qVisual(q)}${optionChoices(q)}<div class="exam-actions"><button class="btn gray" onclick="prevQ()">Previous</button><button class="btn secondary" onclick="clearAns()">Clear</button><button class="btn secondary report-btn" onclick="reportQuestionById(String(state.exam.questions[state.current].id))">⚠️ Report</button><button class="btn orange" onclick="markReview()">Mark Review & Next</button><button class="btn" onclick="nextQ()">Save & Next</button></div></div><div class="palette"><h3 style="margin-top:0">Question Palette</h3><div class="palette-grid">${state.exam.questions.map((_,i)=>`<button class="qbtn ${state.answers[i]!==null?'answered':''} ${state.review[i]?'review':''} ${state.visited[i]?'visited':''} ${state.current===i?'current':''}" onclick="jumpQ(${i})">${i+1}</button>`).join('')}</div><p class="small muted">Answered: ${state.answers.filter(x=>x!==null).length} • Review: ${state.review.filter(Boolean).length} • Visited: ${state.visited.filter(Boolean).length}</p><button class="btn secondary" style="width:100%" onclick="exitTest()">Exit Test</button></div></div></main>`
 }
 function exitTest(){
+  if(state.exam?.lockMode && !confirm('🔒 Exam Lock Mode: Exit this full test? Your current attempt will be cleared.'))return;
+  trackCurrentQuestionTime();
   if(state.timer){clearInterval(state.timer);state.timer=null}
   clearSavedExam();
   state.page='dashboard';
@@ -2240,16 +2633,18 @@ function exitTest(){
 }
 function selectAns(i){state.answers[state.current]=i;saveSession();renderExamOnly()}
 function renderExamOnly(){document.getElementById('app').innerHTML=examPage();setTimeout(renderVisibleQuestionFiles,0)}
-function prevQ(){if(state.current>0)state.current--;saveSession();renderExamOnly()}
-function nextQ(){if(state.current<state.exam.questions.length-1)state.current++;saveSession();renderExamOnly()}
+function prevQ(){trackCurrentQuestionTime();if(state.current>0)state.current--;markVisited(state.current);state.questionStartedAt=Date.now();saveSession();renderExamOnly()}
+function nextQ(){trackCurrentQuestionTime();if(state.current<state.exam.questions.length-1)state.current++;markVisited(state.current);state.questionStartedAt=Date.now();saveSession();renderExamOnly()}
 function clearAns(){state.answers[state.current]=null;saveSession();renderExamOnly()}
-function markReview(){state.review[state.current]=true;if(state.current<state.exam.questions.length-1)state.current++;saveSession();renderExamOnly()}
-function jumpQ(i){state.current=i;saveSession();renderExamOnly()}
+function markReview(){trackCurrentQuestionTime();state.review[state.current]=true;if(state.current<state.exam.questions.length-1)state.current++;markVisited(state.current);state.questionStartedAt=Date.now();saveSession();renderExamOnly()}
+function jumpQ(i){trackCurrentQuestionTime();state.current=i;markVisited(i);state.questionStartedAt=Date.now();saveSession();renderExamOnly()}
 
 function submitExam(auto=false){
   if(!auto&&!confirm('Submit the test now?'))return;
+  trackCurrentQuestionTime();
   if(state.timer){clearInterval(state.timer);state.timer=null}
   syncExamClock();
+  const examMeta={mode:state.exam?.mode||'',lockMode:!!state.exam?.lockMode,meta:state.exam?.meta||{}};
   const qs=state.exam.questions;
   let correct=0,wrong=0,unattempted=0;
   const details=qs.map((q,i)=>{
@@ -2259,14 +2654,19 @@ function submitExam(auto=false){
     else if(ans===null)unattempted++;
     else if(Array.isArray(q.validAnswers)&&q.validAnswers.length?q.validAnswers.includes(ans):ans===q.a){correct++;status='correct'}
     else{wrong++;status='wrong'}
-    return{q,ans,status}
+    return{q,ans,status,timeSpent:Number(state.questionTime[i]||0)};
   });
   const score=correct*4-wrong;
   const used=Math.max(0,state.exam.minutes*60-state.seconds);
   const accuracy=Math.round(correct/qs.length*100);
   const timeBonus=Math.max(0,Math.min(80,Math.floor(state.seconds/15)));
   const points=Math.max(0,correct*20-wrong*5+(accuracy>=90?120:accuracy>=80?70:accuracy>=70?35:0)+timeBonus);
-  const result={id:Date.now(),name:state.exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,details};
+  const now=Date.now();
+  const result={id:now,completedAt:now,name:state.exam.name,date:new Date().toLocaleString(),score,correct,wrong,unattempted,total:qs.length,accuracy,used,points,mode:examMeta.mode,examMeta:examMeta.meta,details};
+
+  if(examMeta.mode==='revision')updateRevisionAfterResult(details,now);
+  else scheduleWrongQuestions(details,now);
+
   const arr=getResults();arr.push(result);saveResults(arr);
   state.lastResult=result;
   syncAttemptToAccount(result);
@@ -2278,12 +2678,12 @@ function submitExam(auto=false){
 function performanceLabel(a){if(a>=90)return '🔥 Rank Booster! Excellent NEET control.';if(a>=80)return '⚡ Strong! Keep the streak alive.';if(a>=70)return '💪 Good fight. Fix the weak concepts.';if(a>=60)return '🎯 Improvement zone. Review explanations and retry.';return '🚀 Comeback mode. Revise concepts, then attack again.'}
 function resultPage(){const r=state.lastResult;if(!r)return layout('<div class="empty">No result available.</div>');return layout(`<h1 class="page-title">Test Result</h1><div class="grid stats"><div class="card"><div class="muted">Score</div><div class="result-score">${r.score}/${r.total*4}</div></div><div class="card"><div class="muted">Correct</div><div class="metric">${r.correct}</div></div><div class="card"><div class="muted">Wrong</div><div class="metric" style="color:var(--red)">${r.wrong}</div></div><div class="card"><div class="muted">Accuracy</div><div class="metric">${r.accuracy}%</div></div></div><div class="card xp-card" style="margin-top:16px"><div class="points-pop" style="color:white">+${r.points} XP</div><div class="josh">${performanceLabel(r.accuracy)}</div><div>Time: ${formatTime(r.used)} • Unattempted: ${r.unattempted}</div></div><h2>Question-by-Question Explanation</h2>${r.details.map((d,i)=>reviewHTML(d,i)).join('')}`)}
 function correctAnswerText(q){if(q.dropped)return 'DROP (+4 awarded)';if(Array.isArray(q.validAnswers)&&q.validAnswers.length>1)return q.validAnswers.map(i=>answerText(q,i)).join(' / ');return answerText(q,q.a)}
-function reviewHTML(d,i){const q=d.q,b=getBookmarks(),marked=b.includes(q.id);return `<div class="review-card"><button class="bookmark-btn" onclick="toggleBookmark(${q.id})">${marked?'★':'☆'}</button><div class="q-number">Q${i+1} • ${q.subject} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}<div class="${d.status==='correct'?'correct':d.status==='wrong'?'wrong':'muted'}">Status: ${d.status.toUpperCase()}</div><p><b>Your Answer:</b> ${q.dropped?'Not required':(d.ans===null?'Not Attempted':answerText(q,d.ans))}</p><p><b>Correct Answer:</b> <span class="correct">${correctAnswerText(q)}</span></p><div class="explanation"><b>Detailed Explanation:</b><br>${q.e}</div><p><b>Concept:</b> ${q.concept}</p><p class="small muted"><b>Source style:</b> ${q.source||'Original Practice'}</p></div>`}
+function reviewHTML(d,i){const q=d.q,b=getBookmarks(),marked=b.includes(q.id);return `<div class="review-card"><button class="bookmark-btn" onclick="toggleBookmark(${q.id})">${marked?'★':'☆'}</button><div class="q-number">Q${i+1} • ${q.subject} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}<div class="${d.status==='correct'?'correct':d.status==='wrong'?'wrong':'muted'}">Status: ${d.status.toUpperCase()}</div><p><b>Your Answer:</b> ${q.dropped?'Not required':(d.ans===null?'Not Attempted':answerText(q,d.ans))}</p><p><b>Correct Answer:</b> <span class="correct">${correctAnswerText(q)}</span></p><div class="explanation"><b>Detailed Explanation:</b><br>${q.e}</div><p><b>Concept:</b> ${q.concept}</p><p class="small muted"><b>Source style:</b> ${q.source||'Original Practice'}</p><button class="btn secondary report-btn" onclick="reportQuestionById(${JSON.stringify(String(q.id))})">⚠️ Report Question</button></div>`}
 function toggleBookmark(id){let b=getBookmarks();if(b.includes(id)){b=b.filter(x=>x!==id);toast('Bookmark removed')}else{b.push(id);toast('Question bookmarked')}saveBookmarks(b);render()}
 
 function historyTable(r){if(!r.length)return '<div class="empty">No tests attempted yet.</div>';return `<div class="table-wrap"><table><tr><th>Test</th><th>Date</th><th>Score</th><th>Accuracy</th><th>XP</th></tr>${r.map(x=>`<tr><td>${x.name}</td><td>${x.date}</td><td>${x.score}/${x.total*4}</td><td>${x.accuracy}%</td><td>+${pointsForResult(x)}</td></tr>`).join('')}</table></div>`}
 function historyPage(){return layout(`<h1 class="page-title">Test History</h1><div class="card">${historyTable(getResults().slice().reverse())}</div>`)}
-function wrongPage(){const wrong=[];getResults().forEach(r=>r.details.forEach(d=>{if(d.status==='wrong')wrong.push(d)}));return layout(`<h1 class="page-title">Wrong Question Book</h1>${wrong.length?wrong.slice().reverse().map((d,i)=>reviewHTML(d,i)).join(''):'<div class="card empty">No wrong questions yet.</div>'}`)}
+function wrongPage(){return mistakeNotebookPage()}
 function bookmarksPage(){const ids=getBookmarks(),qs=allQuestions().filter(q=>ids.includes(q.id));return layout(`<h1 class="page-title">Bookmarked Questions</h1>${qs.length?qs.map((q,i)=>reviewHTML({q,ans:null,status:'unattempted'},i)).join(''):'<div class="card empty">No bookmarks yet.</div>'}`)}
 function myAddedPage(){const qs=getCustom();return layout(`<h1 class="page-title">My Added Questions</h1><div class="card" style="margin-bottom:16px"><b>${qs.length} questions added by you.</b><br><span class="small muted">For image/diagram questions, the options stay inside your uploaded image. Students only see clickable A / B / C / D choices.</span></div>${qs.length?qs.slice().reverse().map((q,i)=>`<div class="review-card"><div class="q-number">${q.subject} • Class ${q.class} • ${q.chapter} • ${q.topic} • ${q.difficulty}</div><div class="q-text">${q.q}</div>${qVisual(q)}${q.imageOptionsOnly?'<p><b>Student choices:</b> A &nbsp; B &nbsp; C &nbsp; D</p>':`<p><b>A.</b> ${q.o[0]}</p><p><b>B.</b> ${q.o[1]}</p><p><b>C.</b> ${q.o[2]}</p><p><b>D.</b> ${q.o[3]}</p>`}<p><b>Correct:</b> <span class="correct">${answerText(q,q.a)}</span></p><div class="explanation"><b>Explanation:</b><br>${q.e}</div><br><button class="btn red" onclick="deleteAdminQuestion(${q.id})">Delete Question</button></div>`).join(''):'<div class="card empty">You have not added any questions yet. Open Admin → Add Question.</div>'}`)}
 function deleteAdminQuestion(id){if(!confirm('Delete this added question?'))return;saveCustom(getCustom().filter(q=>q.id!==id));toast('Question deleted');render()}
@@ -2820,9 +3220,20 @@ function randomGameSeed(){
   return (Date.now()^(Math.random()*0xffffffff))>>>0;
 }
 
-function makeFriendGameSet(){
+function makeFriendGameSet(chapter=''){
   const bank=friendGameBank();
   const seed=randomGameSeed();
+  if(chapter){
+    const pool=az11SeededShuffle(bank.filter(q=>q.chapter===chapter),seed);
+    const seen=new Set(),picked=[];
+    for(const q of pool){
+      const text=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
+      if(!text||seen.has(text))continue;
+      seen.add(text);picked.push(q);
+      if(picked.length===20)break;
+    }
+    return az11SeededShuffle(picked,seed+777);
+  }
   const sections=['Physics','Chemistry','Botany','Zoology'];
   const picked=[];
   const usedBase=new Set();
@@ -2877,16 +3288,18 @@ function absorbFriendReaction(room,showToast=true){
   }
 }
 
-async function createFriendGame(){
+async function createFriendGame(chapter=''){
   if(!accountState.user){toast('Login to Account first.');go('account');return}
-  const qs=makeFriendGameSet();
+  chapter=chapter||document.getElementById('friendChapter')?.value||'';
+  const qs=makeFriendGameSet(chapter);
   if(qs.length!==20){toast('Game question bank is still loading. Reopen once.');return}
 
   try{
     const d=await friendGameApi({
       action:'create',
       questionIds:qs.map(q=>String(q.id)),
-      correctAnswers:qs.map(q=>Number(q.a))
+      correctAnswers:qs.map(q=>Number(q.a)),
+      label:chapter?`Chapter Challenge • ${chapter}`:'Random PCB Challenge'
     });
     friendGameRoom=d.room;
     friendGameLastReactionId='';
@@ -3066,11 +3479,14 @@ function friendGamePage(){
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:14px">
         <div class="card">
           <h2>Create Game</h2>
-          <p><b>20 random NEET questions</b> from the 1000+ AZ11 bank.</p>
-          <p>Balanced set: 5 Physics • 5 Chemistry • 5 Botany • 5 Zoology.</p>
+          <p><b>Random PCB:</b> 5 Physics • 5 Chemistry • 5 Botany • 5 Zoology.</p>
           <p><b>Scoring:</b> Correct = 1 point • Wrong = 0 point.</p>
-          <p class="small muted">Create a new room anytime to get a completely fresh random set.</p>
-          <button class="btn green" onclick="createFriendGame()">🎮 Create Friend Game</button>
+          <button class="btn green" onclick="createFriendGame('')">🎮 Create Random Game</button>
+          <hr style="border:0;border-top:1px solid var(--border);margin:16px 0">
+          <label><b>Challenge Friend by Chapter</b>
+            <select id="friendChapter"><option value="">Choose chapter</option>${chapters.map(x=>`<option>${x}</option>`).join('')}</select>
+          </label>
+          <br><button class="btn purple" onclick="createFriendGame()">⚔️ Create Chapter Challenge</button>
         </div>
         <div class="card">
           <h2>Join Friend</h2>
@@ -3090,7 +3506,7 @@ function friendGamePage(){
     <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
       <div>
         <h2 style="margin:0">Room ${esc(r.code)}</h2>
-        <span class="small muted">Fresh random 20 • Same questions and order for both players</span>
+        <span class="small muted">${esc(r.label||'Friend Game')} • Same 20 questions and order for both players</span>
       </div>
       <div class="row" style="gap:8px">
         <button class="btn secondary" onclick="copyFriendGameCode()">📋 Copy Code</button>
@@ -3223,8 +3639,17 @@ document.addEventListener('visibilitychange',()=>{
     else{render();runTimer()}
   }
 });
-window.addEventListener('pagehide',()=>{syncExamClock();saveSession()});
-window.addEventListener('beforeunload',()=>{syncExamClock();saveSession()});
+window.addEventListener('pagehide',()=>{trackCurrentQuestionTime();syncExamClock();saveSession()});
+window.addEventListener('beforeunload',e=>{
+  trackCurrentQuestionTime();syncExamClock();saveSession();
+  if(state.page==='exam'&&state.exam?.lockMode){e.preventDefault();e.returnValue=''}
+});
+window.addEventListener('popstate',()=>{
+  if(state.page==='exam'&&state.exam?.lockMode){
+    try{history.pushState({az11ExamLock:true},'',location.href)}catch(e){}
+    toast('🔒 Exam Lock Mode: use Submit or Exit Test.');
+  }
+});
 
 
 window.addEventListener('online',()=>{
@@ -3247,6 +3672,10 @@ function render(){
   document.body.style.overflow='';
   let html='';
   if(state.page==='dashboard')html=dashboard();
+  else if(state.page==='dailyplan')html=dailyPlanPage();
+  else if(state.page==='weak')html=weakTopicPage();
+  else if(state.page==='revision')html=revisionPage();
+  else if(state.page==='analysis')html=fullAnalysisPage();
   else if(state.page==='fulltests'||state.page==='tests')html=fullTestsPage();
   else if(state.page==='chaptertests')html=chapterTestsPage();
   else if(state.page==='diagrams')html=diagramsPage();
@@ -3271,18 +3700,19 @@ function render(){
   if(state.page==='admin')setTimeout(toggleAdminOptions,0);
   if(state.page==='notes')setTimeout(renderSyncedNoteAttachments,0);
 }
+updateDailyStreak();
+applyAZ11Theme();
+getRevisionQueue();
 restoreSession();
 render();
 Promise.all([syncNotesFromOwner(false),syncRemoteQuestions(false),syncPdfTests(false),loadAccount()]).then(()=>{
   if(state.page!=='exam'&&state.page!=='result')render();
   setTimeout(renderVisibleQuestionFiles,0);
   syncPendingAttempts();
+  setTimeout(openInviteFromUrl,150);
 });
 syncNotesFromOwner(false).then(ok=>{
-  if(ok && state.page==='notes'){updateDailyStreak();
-applyAZ11Theme();
-setTimeout(openInviteFromUrl,200);
-render();setTimeout(renderSyncedNoteAttachments,0)}
+  if(ok && state.page==='notes'){render();setTimeout(renderSyncedNoteAttachments,0)}
 });
 if(state.page==='exam'&&state.exam){
   syncExamClock();
