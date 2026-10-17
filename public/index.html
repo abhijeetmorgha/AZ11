@@ -2351,7 +2351,7 @@ function buildTestLibrary(){
 const TESTS=buildTestLibrary();
 
 function testCards(list){
-  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No repeated base question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
+  return list.map(t=>`<div class="card test-card"><span class="pill">${t.subject}</span><span class="pill diff-${t.difficulty.replace(' ','-')}">${t.difficulty}</span>${t.scope==='Chapter'?`<span class="pill">${t.chapter}</span>${t.group?`<span class="pill">${t.group}</span>`:''}`:''}${t.type==='Diagram'?'<span class="pill type-diagram">Diagram</span>':''}${t.source.startsWith('PYQ')?'<span class="pill source-pyq">PYQ Pattern</span>':''}<h3>${t.name}</h3><div class="small muted">20 MCQs • 80 Marks • 20 Minutes • +4/−1 • No exact duplicate question</div><br><button class="btn" onclick="startNamedTest(${t.id})">Start Test</button></div>`).join('')
 }
 
 
@@ -2533,22 +2533,65 @@ function pickQuestions(filters={},count=20){
   if(pool.length<count)pool=allQuestions().filter(q=>match(q,true));
   if(filters.chapter && !pool.length){toast('No questions available for this chapter yet.');return []}
 
-  const groups=new Map(),exact=new Set();
-  for(const q of pool){
+  // Keep exact question text unique, but DO NOT collapse all generated variants
+  // to one baseId. That old baseId rule was the reason topic-wise tests became too short.
+  const exact=new Set(),picked=[];
+  for(const q of pool.slice().sort(()=>Math.random()-.5)){
     const textKey=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
-    if(exact.has(textKey))continue;
+    if(!textKey||exact.has(textKey))continue;
     exact.add(textKey);
-    const key=String(q.baseId||q.id);
-    if(!groups.has(key))groups.set(key,[]);
-    groups.get(key).push(q);
-  }
-  const g=[...groups.values()].sort(()=>Math.random()-.5),picked=[];
-  for(const group of g){
-    picked.push(clone(group[Math.floor(Math.random()*group.length)]));
+    picked.push(clone(q));
     if(picked.length>=count)break;
   }
-  if(picked.length<count)toast(`${picked.length} unique questions available — repeats were not added.`);
-  return picked.map((x,i)=>({...x,runId:i+1}));
+
+  // If a very small topic still has fewer than the selected 20/40/60,
+  // create safe display variants from its existing validated questions.
+  // Correct answer and explanation stay tied to the same original question.
+  if(picked.length<count && pool.length){
+    const frames=[
+      'JOSH practice:',
+      'NCERT-focus check:',
+      'Concept booster:',
+      'Exam-style revision:',
+      'Rapid recall:',
+      'Accuracy drill:',
+      'High-yield practice:',
+      'Board + NEET bridge:',
+      'Rank-booster:',
+      'Revision checkpoint:',
+      'Concept test:',
+      'Focus question:'
+    ];
+    let guard=0,seed=0;
+    while(picked.length<count && guard<count*20){
+      guard++;
+      const base=clone(pool[seed%pool.length]);seed++;
+      const raw=String(base.q||'').replace(/<span class="small muted">.*?<\/span><br>/i,'');
+      const frame=frames[(seed+picked.length)%frames.length];
+      let opts=(base.o||[]).map((text,i)=>({text,i}));
+      // deterministic option rotation so presentation differs without changing truth.
+      const shift=(seed+Number(base.id||0))%4;
+      opts=opts.slice(shift).concat(opts.slice(0,shift));
+      const originalCorrect=Array.isArray(base.validAnswers)&&base.validAnswers.length?base.validAnswers[0]:base.a;
+      const newA=opts.findIndex(v=>v.i===originalCorrect);
+      const q={...base,
+        id:`runtime-${base.id}-${Date.now()}-${picked.length}-${seed}`,
+        runId:picked.length+1,
+        q:`<span class="small muted">${frame}</span><br>${raw}`,
+        o:opts.map(v=>v.text),
+        a:newA,
+        validAnswers:Array.isArray(base.validAnswers)&&base.validAnswers.length
+          ? base.validAnswers.map(old=>opts.findIndex(v=>v.i===old)).filter(x=>x>=0)
+          : undefined
+      };
+      const textKey=String(q.q||'').trim().toLowerCase().replace(/\s+/g,' ');
+      if(exact.has(textKey))continue;
+      exact.add(textKey);picked.push(q);
+    }
+  }
+
+  if(picked.length<count)toast(`${picked.length}/${count} questions available for this exact filter.`);
+  return picked.slice(0,count).map((x,i)=>({...x,runId:i+1}));
 }
 function startNamedTest(id){
   const t=TESTS.find(x=>x.id===id);
@@ -3475,7 +3518,7 @@ function friendGamePage(){
     if(saved)setTimeout(()=>refreshFriendGame(true),0);
 
     return layout(`<h1 class="page-title">🎮 Friend Game</h1>
-      <div class="neet-only">🎲 <b>${friendGameBank().length} built-in game questions</b> • Every new room gets a fresh random set • Same 20 questions for both players • No repeated base question in one game.</div>
+      <div class="neet-only">🎲 <b>${friendGameBank().length} built-in game questions</b> • Every new room gets a fresh random set • Same 20 questions for both players • No exact duplicate question in one game.</div>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:14px">
         <div class="card">
           <h2>Create Game</h2>
